@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store
+
+# slurm logs and raw per-trial output
+logs/
+results/**/trial_*.json
+
+# keep aggregated summaries
+!results/*.json
