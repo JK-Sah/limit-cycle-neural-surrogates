@@ -6,7 +6,7 @@ constrain instead.
 Short answer: the error that matters is phase, not amplitude. It is set by a
 single scalar — the relative period error δ — which is invisible in the training
 loss and untouched by every stability method currently in use. Constraining the
-cycle frequency and amplitude directly cuts δ by about 40× at no cost in
+cycle frequency and amplitude directly cuts δ by about 32× at no cost in
 accuracy.
 
 Every number below comes from the scripts in this repository.
@@ -106,15 +106,23 @@ Make both invariants explicit and put the cycle where they say it is:
 r* and ω are parameters, supervised against the amplitude and frequency measured
 from data by Poincaré section. The transverse rate p stays a free network.
 
-| model | median \|δ\| | spread | train MSE |
-|---|---|---|---|
-| free neural ODE | 3.98 × 10⁻⁴ | 3e−4 – 7e−4 | 5.1 × 10⁻⁶ |
-| naive polar split | 3.12 × 10⁻⁴ | 2e−4 – 2e−3 | 6.2 × 10⁻⁶ |
-| anchored, unsupervised | 3.05 × 10⁻⁴ | 2e−4 – 2e−2 | 2.5 × 10⁻⁷ |
-| anchored + supervised | **9.65 × 10⁻⁶** | 4e−6 – 2e−5 | 1.6 × 10⁻⁷ |
+Five seeds each:
 
-About 41× smaller δ with lower training loss, so nothing is traded for it. In
-horizon terms that is decorrelation at roughly 26,000 periods instead of 630.
+| model | median \|δ\| | spread | train MSE | usable horizon |
+|---|---|---|---|---|
+| free neural ODE | 3.98 × 10⁻⁴ | 3.4e−4 – 7.1e−4 | 5.1 × 10⁻⁶ | 629 T |
+| naive polar split | 3.12 × 10⁻⁴ | 1.6e−4 – 2.5e−3 | 6.2 × 10⁻⁶ | 801 T |
+| anchored, unsupervised | 3.05 × 10⁻⁴ | 1.6e−4 – 2.1e−2 | 2.5 × 10⁻⁷ | 821 T |
+| anchored + supervised | **1.25 × 10⁻⁵** | 4.2e−6 – 2.6e−5 | 1.6 × 10⁻⁷ | 19935 T |
+
+About 32× smaller δ at lower training loss, so nothing is traded for it. Usable
+horizon is the rollout length at which phase error reaches π/2, i.e. 1/(4δ).
+
+Structure on its own is worth almost nothing: the naive split and the
+unsupervised anchored model land within 30% of the free baseline. What buys the
+32× is supervising the two invariants. Note also the spread — unsupervised
+anchoring reaches 2.1 × 10⁻², two orders of magnitude worse than its own median,
+because nothing pins the cycle.
 
 Two ablations that did not work, kept because they locate the mechanism. The
 naive polar split writes θ̇ = ω + k(r) and supervises ω; this constrains nothing,
