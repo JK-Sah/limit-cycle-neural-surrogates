@@ -6,20 +6,26 @@ EMERGENT property. Nothing in a short-horizon L2 loss supervises it directly, so
 the frequency error delta is whatever the fit happens to leave behind -- and
 delta alone sets the long-horizon error via dtheta/dt = Omega_hat - Omega.
 
-Three models, increasing structure:
-  free       plain MLP vector field                       (what the field does)
-  struct     f(x) = h(r) x/r + (w + k(r)) Jx              (phase split out,
-                                                           w still only sees L2)
-  struct+sup struct, plus w supervised against the period measured from the
-             training data by Poincare section            (the proposed fix)
+Four models, increasing structure:
+  free          plain MLP vector field                    (what the field does)
+  struct        r' = h(r), th' = w + k(r)                 (phase split out, but
+                                                           k(r*) is free so
+                                                           supervising w does
+                                                           nothing -- ablation)
+  anchored      r' = (r*-r)p(r), th' = w + (r-r*)k(r)     (cycle by construction,
+                                                           invariants explicit)
+  anchored+sup  anchored, with r* and w supervised against the amplitude and
+                frequency measured from the data          (the proposed fix)
 
-Prediction: delta_free ~ delta_struct >> delta_struct+sup, and decorrelation
-time scales as 1/delta. The fix costs one scalar and one loss term.
+Prediction: delta_free ~ delta_struct ~ delta_anchored >> delta_anchored+sup,
+and usable horizon scales as 1/delta. The fix costs two scalars and one loss
+term; the structure alone buys almost nothing.
 """
 import argparse, json, math, time
 import numpy as np
 import torch
 import torch.nn as nn
+from scipy.signal import hilbert
 
 from t0_falsify import (SL, VF, rk4, make_data, learned_period, floquet,
                         drift_decomposition, decorrelation_time)
@@ -86,8 +92,16 @@ class AnchoredVF(nn.Module):
 def measured_invariants(sys, dt=1e-3, n_cyc=40, noise=0.0, seed=0):
     """
     What a practitioner can measure from observed data alone: settle onto the
-    cycle, Poincare-section y=0 (x>0) for the period, and average |x| for the
-    amplitude. `noise` emulates finite sensor/solver precision.
+    cycle, then estimate period and amplitude from the observed trajectory.
+    `noise` emulates finite sensor/solver precision.
+
+    The period comes from a linear fit to the unwrapped phase of the analytic
+    signal. Naive zero-crossing detection must NOT be used here: additive noise
+    puts several spurious crossings around each true one, which inflates the
+    crossing count and collapses the estimated period (at noise=1e-3 it reports
+    a 25% period error that is entirely an artifact of the estimator).
+    Amplitude uses a median for the same robustness reason.
+
     Returns (T_measured, r_measured).
     """
     rng = np.random.default_rng(seed)
@@ -95,13 +109,12 @@ def measured_invariants(sys, dt=1e-3, n_cyc=40, noise=0.0, seed=0):
     traj = sys.rollout(np.array([sys.r_star, 0.0]), t)
     if noise:
         traj = traj + rng.normal(0, noise, traj.shape)
-    cross = []
-    for i in range(len(traj) - 1):
-        y0, y1 = traj[i, 1], traj[i + 1, 1]
-        if y0 < 0 <= y1 and traj[i, 0] > 0:
-            cross.append((i - y0 / (y1 - y0)) * dt)
-    T = float(np.mean(np.diff(np.array(cross[2:]))))
-    r = float(np.linalg.norm(traj[len(traj) // 2:], axis=1).mean())
+
+    k = max(1, len(t) // 10)                    # drop Hilbert edge transients
+    ph = np.unwrap(np.angle(hilbert(traj[:, 1] - traj[:, 1].mean())))
+    slope = np.polyfit(t[k:-k], ph[k:-k], 1)[0]
+    T = float(2 * math.pi / abs(slope))
+    r = float(np.median(np.linalg.norm(traj[len(traj) // 2:], axis=1)))
     return T, r
 
 

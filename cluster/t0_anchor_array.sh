@@ -10,8 +10,10 @@
 #SBATCH --output=logs/anch_%A_%a.out
 #SBATCH --error=logs/anch_%A_%a.err
 
-# Constructive test: anchored limit-cycle parametrization vs free neural ODE.
-# Usage: sbatch --array=0-19 cluster/t0_fix_array.sh
+# Does delta for an anchored model fall to the precision with which the
+# frequency can be MEASURED from data, rather than to whatever the fit leaves?
+# Grid: supervision weight x observation noise x seed.
+# Usage: sbatch --array=0-17 cluster/t0_anchor_array.sh
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
@@ -23,7 +25,6 @@ python src/t0_anchor_sweep.py \
     --task-id "$SLURM_ARRAY_TASK_ID" \
     --epochs 3000 \
     --periods 200 \
-    
     --out results/anchor/trial_$(printf '%03d' "$SLURM_ARRAY_TASK_ID").json
 
 echo "task $SLURM_ARRAY_TASK_ID done on $(hostname)"
