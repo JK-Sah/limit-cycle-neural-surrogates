@@ -5,9 +5,14 @@ constrain instead.
 
 Short answer: the error that matters is phase, not amplitude. It is set by a
 single scalar — the relative period error δ — which is invisible in the training
-loss and untouched by every stability method currently in use. Constraining the
-cycle frequency and amplitude directly cuts δ by about 32× at no cost in
-accuracy.
+loss and untouched by every stability method currently in use. Carrying phase as
+an explicit coordinate with a measured frequency makes the rollout period exact
+by construction.
+
+Two results cut against the obvious story and are reported anyway. On a cylinder
+wake at Re = 100 a well-trained free model already reaches δ ≈ 2 × 10⁻⁵, so phase
+drift does not limit it. And the first anchored parametrization tried here made
+δ *worse*, for a reason worth knowing.
 
 Every number below comes from the scripts in this repository.
 
@@ -130,6 +135,95 @@ because the on-cycle rate is ω + k(r*) and k absorbs whatever ω is pinned to.
 Anchoring without supervision is unstable: one seed produced δ = −6.4 × 10⁻², a
 transverse multiplier of 0.992, and took ten times as long to train.
 
+### What sets the floor
+
+Supervision weight against observation noise on the measured frequency. The
+floor column is the error in the measured period itself:
+
+| supervision weight | obs. noise | measurement floor | median \|δ\| | δ / floor |
+|---|---|---|---|---|
+| 1 | 0 | 1.8 × 10⁻¹⁰ | 1.26 × 10⁻⁵ | 71650 |
+| 10² | 0 | 1.8 × 10⁻¹⁰ | 8.21 × 10⁻⁸ | 466 |
+| 10⁴ | 0 | 1.8 × 10⁻¹⁰ | 3.75 × 10⁻¹⁰ | 2.1 |
+| 10⁴ | 10⁻³ | 9.68 × 10⁻⁸ | 9.68 × 10⁻⁸ | **1.0** |
+| 10⁴ | 10⁻² | 9.67 × 10⁻⁷ | 9.67 × 10⁻⁷ | **1.0** |
+
+Weighted hard enough, δ equals the precision with which the frequency can be
+measured and nothing else. That is the mechanism in one column.
+
+## Cylinder wake at Re = 100
+
+The oscillator results have phase handed to the model as a coordinate. The wake
+is the test of whether any of it survives when phase has to come out of flow
+fields.
+
+D2Q9 lattice Boltzmann at 5% blockage, POD by method of snapshots, then a latent
+ODE on the coefficients. Modes 1–2 emerge as the shedding pair (95.67% of energy;
+harmonics at 1.37/1.35 and 0.75/0.74), and the reference period from POD
+coefficient 1 agrees with an independent wake probe to 0.000%, so the latent
+phase is the physical one.
+
+**The free model is already good enough here.** At 4000 epochs it reaches
+δ ≈ 2 × 10⁻⁵, a usable horizon around 10⁴ shedding periods, past any engineering
+need. Reported plainly, because this case was run to test exactly that:
+
+| model | width | params | train MSE | δ | horizon |
+|---|---|---|---|---|---|
+| free | 96 | 20264 | 1.11 × 10⁻⁶ | −3.64 × 10⁻⁵ | 6866 P |
+| free | 96 | 20264 | 1.31 × 10⁻⁶ | −7.28 × 10⁻⁷ | 343269 P |
+| free | 168 | 59648 | 6.49 × 10⁻⁷ | −2.83 × 10⁻⁵ | 8835 P |
+| free | 256 | 135944 | 7.35 × 10⁻⁷ | −2.95 × 10⁻⁵ | 8474 P |
+
+What does reproduce is the decoupling. Within a width, MSE is flat to 20% while
+δ spans 50×, and at width 168 the sign of δ flips between seeds. Tripling the
+parameters halves the MSE and does nothing for δ.
+
+### Phase-anchored latent dynamics
+
+The polar-split model of the previous section fails here — 30× worse δ than free.
+The measured cause: orbit radius varies only 0.6% around the cycle, but phase
+advance is **0.50% non-uniform**. Forcing θ̇ = ω pointwise is a false constraint,
+and the fit trades period accuracy against field accuracy to meet it.
+
+Carrying phase as its own coordinate fixes that. ω is measured rather than
+learned, and a Fourier loop Z(φ) absorbs the non-uniformity:
+
+    state (φ, s):   φ̇ = ω,   ṡ = g(s, φ),   a = Z(φ) + s
+
+The rollout period is 2π/ω by construction — no penalty, no weight to tune, and
+nothing the optimiser does to Z or g can change it. At 300 epochs, equal
+parameter count:
+
+| model | params | train MSE | δ |
+|---|---|---|---|
+| free | 20264 | 3.29 × 10⁻³ | +4.01 × 10⁻² |
+| polar-split anchored | 59242 | 3.01 × 10⁻⁴ | −6.26 × 10⁻⁴ |
+| phase-anchored | 20568 | **1.11 × 10⁻⁶** | **+9.73 × 10⁻⁷** |
+
+It reaches in 300 epochs the MSE the free model needs 4000 for, and its residual
+δ is the floor of the period estimator rather than a property of the model.
+
+### Solver validation, and a retraction
+
+| D | grid | St | vs 0.1643 | period jitter |
+|---|---|---|---|---|
+| 16 | 480×320 | 0.16643 | +1.30% | 1.7 × 10⁻⁶ |
+| 24 | 720×480 | 0.16851 | +2.56% | 5.9 × 10⁻⁷ |
+| 32 | 960×640 | 0.16889 | +2.79% | 5.0 × 10⁻⁷ |
+| 40 | 1200×800 | 0.16903 | +2.88% | 5.3 × 10⁻⁷ |
+
+St converges to ≈0.169 rather than Williamson's unconfined 0.1643, consistent
+with 5% blockage; a blockage study at fixed D is running to confirm. Period
+jitter near 5 × 10⁻⁷ is what matters here: the reference period is good to six
+digits.
+
+**Drag is retracted.** The momentum-exchange estimate gives Cd = 1.05, 0.43,
+0.04, −0.20 over D = 16…40, and negative drag is impossible. True drag is ~0.27
+in lattice units against a raw link sum of ~15, so the estimate rides on 2%
+cancellation, and any systematic error in the link set grows with the perimeter
+and overwhelms it. Flagged in the code and excluded from output. Strouhal comes
+from the probe and is unaffected.
+
 ## Limitations
 
 Stuart–Landau is a two-dimensional toy with an analytically known cycle. None of
@@ -140,9 +234,19 @@ several configurations never decorrelated within it, so those comparisons are
 censored and reported that way. The p = 0.20 correlation is weak evidence of no
 relationship, not proof of independence.
 
-Cylinder wake at Re = 100 is the next test, where the Strouhal number is known to
-three digits and δ can be measured against literature rather than against another
-simulation.
+For the wake, the honest summary is that the diagnostic transfers and the warning
+does not. The phase law, the loss decoupling and the insensitivity to capacity
+all reproduce on Navier–Stokes, but δ for a well-trained free model is ~2 × 10⁻⁵,
+so phase drift is not what limits a cylinder-wake surrogate. A Re = 100 wake is
+genuinely low-dimensional and near-harmonic — closer to Stuart–Landau than to a
+hard problem — and 8 POD modes on a single noise-free trajectory is the easiest
+version of the task.
+
+Where δ should become hard to control is where the frequency itself is hard to
+pin: operators generalising across Reynolds number, higher Re with broadband wake
+dynamics, and flexible FSI where the structure sets its own timescale. Those are
+the next cases. Until one of them shows a large δ, phase-anchoring is worth using
+for the guarantee and the training-cost saving rather than as a rescue.
 
 ## Install and run
 
@@ -166,6 +270,15 @@ sbatch --array=0-17 cluster/t0_anchor_array.sh
 python src/analyze.py "results/all/*.json"
 ```
 
+Cylinder wake:
+
+```bash
+sbatch --array=0-3 cluster/cyl_res_array.sh
+sbatch --array=0-3 cluster/cyl_blockage.sh
+sbatch cluster/cyl_snapshots.sh
+sbatch cluster/cyl_latent_job.sh
+```
+
 ## Layout
 
 | path | contents |
@@ -173,5 +286,7 @@ python src/analyze.py "results/all/*.json"
 | `src/t0_falsify.py` | ground truth, neural ODE, Floquet and drift diagnostics, scaling and regularizer sweeps |
 | `src/t0_fix.py` | anchored parametrization and the naive-split ablation |
 | `src/t0_anchor_sweep.py` | supervision weight against observation noise |
-| `src/analyze.py` | aggregation and the prediction tests |
+| `src/cylinder_lbm.py` | D2Q9 lattice Boltzmann cylinder wake at Re = 100 |
+| `src/cyl_latent.py` | POD, free / polar-split / phase-anchored latent ODEs |
+| `src/analyze.py`, `src/harvest.py` | aggregation and the prediction tests |
 | `cluster/` | Slurm array scripts |
