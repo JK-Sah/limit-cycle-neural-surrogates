@@ -82,8 +82,14 @@ class Cylinder:
         # no collision inside the solid: those nodes only bounce back
         fpost[:, self.solid] = self.f[:, self.solid]
 
-        # Momentum exchange (Ladd/Mei) summed over links that cross the surface:
-        #   F = sum_links c_i [ f_i(x_f) + f_ibar(x_f) ]
+        # Momentum exchange (Ladd/Mei) over links that cross the surface.
+        # WARNING: this drag/lift estimate is NOT validated and must not be
+        # reported. Under refinement Cd falls 1.05 -> 0.42 -> 0.04 -> -0.20 for
+        # D = 16..40, which is unphysical. The true drag is ~0.27 in lattice
+        # units while the raw link sum is ~15, so the result depends on 2%
+        # cancellation and any systematic error in the link set grows with the
+        # perimeter and swamps it. The Strouhal number, which is what this
+        # study needs, comes from the wake probe and is unaffected.
         fx = fy = 0.0
         for i in range(1, 9):
             sx, sy = int(self.c[i, 0]), int(self.c[i, 1])
@@ -128,8 +134,8 @@ def crossings(t, s):
 
 def run(D=30, Re=100, u_in=0.1, steps=120000, warmup_frac=0.5, perturb_steps=2000,
         probe_every=5, device="cpu", snap_every=0, snap_crop=None,
-        snap_stride=1, verbose=True):
-    sim = Cylinder(D=D, Re=Re, u_in=u_in, device=device)
+        snap_stride=1, ny_D=20, verbose=True):
+    sim = Cylinder(D=D, Re=Re, u_in=u_in, ny_D=ny_D, device=device)
     if verbose:
         print(f"grid {sim.nx}x{sim.ny}  D={D}  tau={sim.tau:.4f}  "
               f"nu={sim.nu:.5f}  blockage={sim.blockage*100:.1f}%  "
@@ -174,6 +180,7 @@ def run(D=30, Re=100, u_in=0.1, steps=120000, warmup_frac=0.5, perturb_steps=200
         T = float(per.mean())
         res.update(T_lattice=T, T_std=float(per.std()),
                    St=float(D / (u_in * T)),
+                   Cd_mean_UNVALIDATED=float(np.mean(np.array(cd)[m])),
                    Cd_mean=float(np.mean(np.array(cd)[m])),
                    Cl_amp=float(np.abs(np.array(cl)[m]).max()))
     return res, dict(t=tp, v=np.array(vp), cl=np.array(cl), cd=np.array(cd)), \
@@ -184,6 +191,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--D", type=int, default=30)
     ap.add_argument("--Re", type=float, default=100)
+    ap.add_argument("--ny-D", type=int, default=20,
+                    help="domain height in diameters; sets blockage = 1/ny_D")
     ap.add_argument("--steps", type=int, default=120000)
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--snap-every", type=int, default=0)
@@ -200,12 +209,15 @@ def main():
         crop = (6 * D, 22 * D, 6 * D, 14 * D)      # wake window around cylinder
     res, sig, (snaps, snap_t) = run(D=a.D, Re=a.Re, steps=a.steps,
                                     device=a.device, snap_every=a.snap_every,
-                                    snap_crop=crop, snap_stride=a.snap_stride)
+                                    snap_crop=crop, snap_stride=a.snap_stride,
+                                    ny_D=a.ny_D)
     print("\n" + json.dumps(res, indent=1))
     if "St" in res:
         print(f"\nSt = {res['St']:.5f}   (Williamson 1989 correlation at "
-              f"Re=100: 0.1643)")
-        print(f"Cd = {res['Cd_mean']:.4f}  (literature 1.32-1.35)")
+              f"Re=100, unconfined: 0.1643)")
+        print(f"period jitter T_std/T = {res['T_std']/res['T_lattice']:.2e}")
+        print(f"[Cd = {res['Cd_mean']:.4f} is NOT validated -- see the note in "
+              f"Cylinder.step; do not report it]")
     json.dump(res, open(a.out, "w"), indent=1)
     if a.save_signal:
         np.savez_compressed(a.save_signal, **sig)

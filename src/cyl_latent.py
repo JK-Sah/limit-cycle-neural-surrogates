@@ -123,6 +123,63 @@ class AnchoredLatent(nn.Module):
         return torch.cat([udot, self.g(a)], dim=-1)
 
 
+class PhaseAnchoredLatent(nn.Module):
+    """
+    Phase carried as its own coordinate, so the period is exact by
+    CONSTRUCTION rather than by penalty:
+
+        state      (phi, s),  phi on the circle, s the deviation from the cycle
+        phi' = omega                       (uniform, and omega is not learned)
+        s'   = g(s, phi)
+        a    = Z(phi) + s                  Z a learned closed loop
+
+    The rollout period is exactly 2*pi/omega. Nothing the optimiser does to Z
+    or g can change it, so delta equals the error in the measured frequency and
+    nothing else.
+
+    This supersedes AnchoredLatent, which set theta' = omega pointwise on the
+    dominant POD pair. That is a false constraint for a real wake: the physical
+    phase advances ~0.5% non-uniformly around a shedding cycle, and forcing it
+    uniform makes the fit trade period accuracy against field accuracy. Here Z
+    absorbs the non-uniformity, because the orbit is a general closed loop in
+    the latent space rather than a circle.
+    """
+    def __init__(self, r, n_harm=6, width=96, depth=3, omega=1.0,
+                 learn_omega=False):
+        super().__init__()
+        self.r, self.n_harm = r, n_harm
+        h = torch.arange(n_harm + 1, dtype=torch.get_default_dtype())
+        self.register_buffer("harm", h)
+        self.Zc = nn.Parameter(torch.zeros(n_harm + 1, r))
+        self.Zs = nn.Parameter(torch.zeros(n_harm + 1, r))
+        if learn_omega:
+            self.omega = nn.Parameter(torch.tensor(float(omega)))
+        else:
+            self.register_buffer("omega", torch.tensor(float(omega)))
+        # transverse dynamics see (s, cos phi, sin phi)
+        self.g = _mlp(r + 2, r, width, depth)
+
+    def Z(self, phi):
+        """Closed loop in latent space: truncated Fourier series in phase."""
+        ang = phi.unsqueeze(-1) * self.harm            # [..., n_harm+1]
+        return (ang.cos() @ self.Zc) + (ang.sin() @ self.Zs)
+
+    def decode(self, phi, s):
+        return self.Z(phi) + s
+
+    def forward(self, state):
+        """state = [phi, s] concatenated: [..., 1+r]"""
+        phi, s = state[..., 0], state[..., 1:]
+        sdot = self.g(torch.cat([s, phi.cos().unsqueeze(-1),
+                                 phi.sin().unsqueeze(-1)], dim=-1))
+        phidot = self.omega.expand(phi.shape).unsqueeze(-1)
+        return torch.cat([phidot, sdot], dim=-1)
+
+    def init_state(self, a, phi0):
+        """Deviation of an observed point from the loop at that phase."""
+        return torch.cat([phi0.unsqueeze(-1), a - self.Z(phi0)], dim=-1)
+
+
 def rk4(f, x, dt, n, noise=0.0):
     out = [x]
     for _ in range(n):
@@ -137,10 +194,10 @@ def rk4(f, x, dt, n, noise=0.0):
 
 # ------------------------------------------------------------------ training
 def make_segments(a, seg_len, stride=1):
-    """Overlapping windows of the coefficient trajectory."""
-    segs = [a[i:i + seg_len + 1] for i in
-            range(0, len(a) - seg_len - 1, stride)]
-    return torch.tensor(np.stack(segs))
+    """Overlapping windows of the coefficient trajectory, plus start indices."""
+    idx = list(range(0, len(a) - seg_len - 1, stride))
+    segs = [a[i:i + seg_len + 1] for i in idx]
+    return torch.tensor(np.stack(segs)), torch.tensor(idx, dtype=torch.long)
 
 
 def train(model, segs, dt, epochs, lr, sup=None, w_sup=1e2, aug_noise=0.0,
@@ -174,6 +231,59 @@ def train(model, segs, dt, epochs, lr, sup=None, w_sup=1e2, aug_noise=0.0,
     return last
 
 
+def train_phase(model, segs, idx, dt, epochs, lr, aug_noise=0.0, batch=64,
+                seed=0):
+    """
+    Training for the phase-anchored model.
+
+    The data is one uniformly sampled trajectory and time was rescaled so a
+    period is 2*pi, so the phase at sample i is exactly omega * i * dt. Nothing
+    has to be inferred: Z is fit as a Fourier series in that phase and g learns
+    the approach to the loop.
+    """
+    torch.manual_seed(seed)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, epochs)
+    n_steps = segs.shape[1] - 1
+    om = float(model.omega)
+    last = float("nan")
+    for _ in range(epochs):
+        sel = torch.randperm(len(segs))[:batch]
+        b, i0 = segs[sel], idx[sel]
+        phi0 = om * i0.to(b.dtype) * dt
+        a0 = b[:, 0]
+        if aug_noise:
+            a0 = a0 + aug_noise * torch.randn_like(a0)
+        opt.zero_grad()
+        st = model.init_state(a0, phi0)
+        traj = rk4(model, st, dt, n_steps)
+        pred = model.decode(traj[..., 0], traj[..., 1:])
+        loss = ((pred - b.transpose(0, 1)) ** 2).mean()
+        last = loss.item()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0)
+        opt.step(); sched.step()
+    return last
+
+
+@torch.no_grad()
+def rollout_period_phase(model, a0, dt, n_periods):
+    """
+    Free rollout of the phase-anchored model. The period should come out at
+    exactly 2*pi/omega; measuring it anyway is the check that nothing in the
+    decode path reintroduces a frequency error.
+    """
+    n = int(n_periods * 2 * math.pi / dt)
+    st = model.init_state(a0.unsqueeze(0), torch.zeros(1, dtype=a0.dtype))
+    traj = rk4(model, st, dt, n)
+    dec = model.decode(traj[..., 0], traj[..., 1:])[:, 0, :].numpy()
+    if not np.isfinite(dec).all():
+        return None, dec
+    t = np.arange(len(dec)) * dt
+    half = len(dec) // 2
+    return period_from_signal(t[half:], dec[half:, 0]), dec
+
+
 @torch.no_grad()
 def rollout_period(model, a0, dt, n_periods, T_model_units=2 * math.pi):
     """Long free rollout, then period of the dominant coefficient."""
@@ -196,6 +306,8 @@ def main():
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--aug-noise", type=float, default=1e-3)
     ap.add_argument("--w-sup", type=float, default=1e2)
+    ap.add_argument("--harmonics", type=int, default=6,
+                    help="Fourier harmonics in the phase-anchored loop Z(phi)")
     ap.add_argument("--free-widths", type=int, nargs="+",
                     default=[96, 168, 256],
                     help="widths for the free baseline; 168 is roughly "
@@ -231,7 +343,7 @@ def main():
     rho_meas = float(np.median(np.linalg.norm(A[:, :2], axis=1)))
     print(f"dt={dt:.5f} model units/snapshot, rho*_measured={rho_meas:.4f}")
 
-    segs = make_segments(A, a.seg_len)
+    segs, seg_idx = make_segments(A, a.seg_len)
     print(f"{len(segs)} training segments of {a.seg_len} steps "
           f"({a.seg_len*dt/(2*math.pi):.2f} periods each)\n")
 
@@ -241,23 +353,35 @@ def main():
     # width-matched comparison would hand it ~3x the parameters. Sweep the free
     # model's width past that point instead, which also re-tests whether extra
     # capacity buys any accuracy in delta.
-    configs = [("free", w) for w in a.free_widths] + [("anchored+sup", 96)]
+    configs = ([("free", w) for w in a.free_widths]
+               + [("anchored+sup", 96), ("phase-anchored", 96)])
     rows = []
     for kind, width in configs:
         for seed in range(a.seeds):
             t0 = time.time()
             torch.manual_seed(seed)
+            a0 = torch.tensor(A[0])
             if kind == "free":
-                model, s = FreeLatent(a.modes, width=width), None
-            else:
+                model = FreeLatent(a.modes, width=width)
+                nparam = sum(p.numel() for p in model.parameters())
+                mse = train(model, segs, dt, a.epochs, 3e-3, sup=None,
+                            aug_noise=a.aug_noise, seed=seed)
+                T_mod, tr = rollout_period(model, a0, dt, a.periods)
+            elif kind == "anchored+sup":
                 model = AnchoredLatent(a.modes, width=width, omega_init=1.0,
                                        rho_init=rho_meas)
-                s = sup
-            nparam = sum(p.numel() for p in model.parameters())
-            mse = train(model, segs, dt, a.epochs, 3e-3, sup=s,
-                        w_sup=a.w_sup, aug_noise=a.aug_noise, seed=seed)
-            a0 = torch.tensor(A[0])
-            T_mod, tr = rollout_period(model, a0, dt, a.periods)
+                nparam = sum(p.numel() for p in model.parameters())
+                mse = train(model, segs, dt, a.epochs, 3e-3, sup=sup,
+                            w_sup=a.w_sup, aug_noise=a.aug_noise, seed=seed)
+                T_mod, tr = rollout_period(model, a0, dt, a.periods)
+            else:
+                # omega is measured, not learned: period is 2*pi/omega exactly
+                model = PhaseAnchoredLatent(a.modes, n_harm=a.harmonics,
+                                            width=width, omega=1.0)
+                nparam = sum(p.numel() for p in model.parameters())
+                mse = train_phase(model, segs, seg_idx, dt, a.epochs, 3e-3,
+                                  aug_noise=a.aug_noise, seed=seed)
+                T_mod, tr = rollout_period_phase(model, a0, dt, a.periods)
             if T_mod is None:
                 print(f"  {kind:13s} w={width:<4d} s={seed} mse={mse:.2e}"
                       f"  DIVERGED", flush=True)
