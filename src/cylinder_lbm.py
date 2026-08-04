@@ -127,7 +127,8 @@ def crossings(t, s):
 
 
 def run(D=30, Re=100, u_in=0.1, steps=120000, warmup_frac=0.5, perturb_steps=2000,
-        probe_every=5, device="cpu", snap_every=0, snap_crop=None, verbose=True):
+        probe_every=5, device="cpu", snap_every=0, snap_crop=None,
+        snap_stride=1, verbose=True):
     sim = Cylinder(D=D, Re=Re, u_in=u_in, device=device)
     if verbose:
         print(f"grid {sim.nx}x{sim.ny}  D={D}  tau={sim.tau:.4f}  "
@@ -152,10 +153,10 @@ def run(D=30, Re=100, u_in=0.1, steps=120000, warmup_frac=0.5, perturb_steps=200
             _, ux, uy = sim.macro()
             if snap_crop:
                 x0, x1, y0, y1 = snap_crop
-                snaps.append(torch.stack([ux[x0:x1, y0:y1],
-                                          uy[x0:x1, y0:y1]]).cpu().numpy())
-            else:
-                snaps.append(torch.stack([ux, uy]).cpu().numpy())
+                ux, uy = ux[x0:x1, y0:y1], uy[x0:x1, y0:y1]
+            st = max(1, snap_stride)
+            snaps.append(torch.stack([ux[::st, ::st],
+                                      uy[::st, ::st]]).cpu().numpy())
             snap_t.append(n)
         if verbose and n and n % max(1, steps // 10) == 0:
             mlups = sim.nx * sim.ny * n / (time.time() - t0) / 1e6
@@ -186,6 +187,8 @@ def main():
     ap.add_argument("--steps", type=int, default=120000)
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--snap-every", type=int, default=0)
+    ap.add_argument("--snap-stride", type=int, default=1,
+                    help="spatial subsampling factor for saved snapshots")
     ap.add_argument("--out", default="cyl.json")
     ap.add_argument("--save-signal", default=None)
     ap.add_argument("--save-snaps", default=None)
@@ -197,7 +200,7 @@ def main():
         crop = (6 * D, 22 * D, 6 * D, 14 * D)      # wake window around cylinder
     res, sig, (snaps, snap_t) = run(D=a.D, Re=a.Re, steps=a.steps,
                                     device=a.device, snap_every=a.snap_every,
-                                    snap_crop=crop)
+                                    snap_crop=crop, snap_stride=a.snap_stride)
     print("\n" + json.dumps(res, indent=1))
     if "St" in res:
         print(f"\nSt = {res['St']:.5f}   (Williamson 1989 correlation at "
@@ -208,7 +211,9 @@ def main():
         np.savez_compressed(a.save_signal, **sig)
     if a.save_snaps and snaps is not None:
         np.savez_compressed(a.save_snaps, snaps=snaps, t=snap_t,
-                            T_lattice=res.get("T_lattice", np.nan))
+                            T_lattice=res.get("T_lattice", np.nan),
+                            D=a.D, u_in=res["u_in"], St=res.get("St", np.nan),
+                            snap_stride=a.snap_stride)
         print(f"saved {snaps.shape} snapshots")
 
 
