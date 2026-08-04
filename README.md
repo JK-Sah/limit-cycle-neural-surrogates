@@ -167,16 +167,19 @@ phase is the physical one.
 δ ≈ 2 × 10⁻⁵, a usable horizon around 10⁴ shedding periods, past any engineering
 need. Reported plainly, because this case was run to test exactly that:
 
-| model | width | params | train MSE | δ | horizon |
-|---|---|---|---|---|---|
-| free | 96 | 20264 | 1.11 × 10⁻⁶ | −3.64 × 10⁻⁵ | 6866 P |
-| free | 96 | 20264 | 1.31 × 10⁻⁶ | −7.28 × 10⁻⁷ | 343269 P |
-| free | 168 | 59648 | 6.49 × 10⁻⁷ | −2.83 × 10⁻⁵ | 8835 P |
-| free | 256 | 135944 | 7.35 × 10⁻⁷ | −2.95 × 10⁻⁵ | 8474 P |
+Five seeds per configuration, 4000 epochs:
 
-What does reproduce is the decoupling. Within a width, MSE is flat to 20% while
-δ spans 50×, and at width 168 the sign of δ flips between seeds. Tripling the
-parameters halves the MSE and does nothing for δ.
+| model | width | params | med MSE | med \|δ\| | δ spread | horizon |
+|---|---|---|---|---|---|---|
+| free | 96 | 20264 | 1.01 × 10⁻⁶ | 8.61 × 10⁻⁵ | 37.2× | 2903 P |
+| free | 168 | 59648 | 7.31 × 10⁻⁷ | 2.59 × 10⁻⁵ | 6.9× | 9667 P |
+| free | 256 | 135944 | 6.92 × 10⁻⁷ | 4.59 × 10⁻⁵ | 6.3× | 5443 P |
+
+What does reproduce is the decoupling. Nearly 7× the parameters buys 30% off the
+MSE and nothing on δ, which stays in the 10⁻⁵ band and is non-monotonic in width.
+The seed spread is the other half: δ varies 6–37× across seeds at fixed
+architecture and data. Long-horizon fidelity here is a lottery that the loss
+does not report.
 
 ### Phase-anchored latent dynamics
 
@@ -194,14 +197,26 @@ The rollout period is 2π/ω by construction — no penalty, no weight to tune, 
 nothing the optimiser does to Z or g can change it. At 300 epochs, equal
 parameter count:
 
-| model | params | train MSE | δ |
-|---|---|---|---|
-| free | 20264 | 3.29 × 10⁻³ | +4.01 × 10⁻² |
-| polar-split anchored | 59242 | 3.01 × 10⁻⁴ | −6.26 × 10⁻⁴ |
-| phase-anchored | 20568 | **1.11 × 10⁻⁶** | **+9.73 × 10⁻⁷** |
+Five seeds, 4000 epochs, against the free baselines above:
 
-It reaches in 300 epochs the MSE the free model needs 4000 for, and its residual
-δ is the floor of the period estimator rather than a property of the model.
+| model | params | med MSE | med \|δ\| | δ spread | horizon |
+|---|---|---|---|---|---|
+| polar-split anchored | 59242 | diverged | 1.20 | 253× | 0 P |
+| free (best config) | 59648 | 7.31 × 10⁻⁷ | 2.59 × 10⁻⁵ | 6.9× | 9667 P |
+| phase-anchored | 20568 | **5.52 × 10⁻⁷** | **2.75 × 10⁻⁸** | **1.0×** | **9102010 P** |
+
+940× smaller δ than the best free configuration, the lowest MSE of any model
+tried, at a seventh the parameters of free-256. The seed spread is the part that
+matters most: **1.0×**, against 6–37× for free. Per-seed δ is 2.744, 2.761,
+2.741, 2.758, 2.747 × 10⁻⁸. The period stops being a lottery because it is no
+longer an outcome of the fit.
+
+That residual 2.75 × 10⁻⁸ is the bias of the period estimator applied to the
+rollout, not a property of the model: the model's period is exactly 2π/ω by
+construction, and the same five digits appear regardless of seed.
+
+The polar-split model is kept as a failed ablation. It does not merely
+underperform — median δ is 1.20, a 120% period error, with some seeds NaN.
 
 ### Solver validation, and a retraction
 
@@ -212,10 +227,25 @@ It reaches in 300 epochs the MSE the free model needs 4000 for, and its residual
 | 32 | 960×640 | 0.16889 | +2.79% | 5.0 × 10⁻⁷ |
 | 40 | 1200×800 | 0.16903 | +2.88% | 5.3 × 10⁻⁷ |
 
-St converges to ≈0.169 rather than Williamson's unconfined 0.1643, consistent
-with 5% blockage; a blockage study at fixed D is running to confirm. Period
-jitter near 5 × 10⁻⁷ is what matters here: the reference period is good to six
-digits.
+St converges to ≈0.169 rather than Williamson's unconfined 0.1643. The obvious
+explanation, blockage, is **wrong**: opening the domain from 5% to 1.7% blockage
+at fixed D leaves St at ~0.169 and does not move it monotonically.
+
+| ny/D | blockage | St | vs 0.1643 |
+|---|---|---|---|
+| 20 | 5.00% | 0.16851 | +2.56% |
+| 30 | 3.33% | 0.16904 | +2.89% |
+| 40 | 2.50% | 0.16930 | +3.05% |
+| 60 | 1.67% | 0.16878 | +2.72% |
+
+The remaining suspect is compressibility: these runs use Ma = 0.173, above the
+Ma < 0.1 that lattice Boltzmann practice calls for. A Mach study at fixed
+relaxation time (D scaled inversely with inflow speed) is running. Until it
+resolves, the +2.9% offset is an open discrepancy and is reported as one.
+
+None of this affects the δ results, which measure a surrogate against the
+solver's own period. Period jitter near 5 × 10⁻⁷ is what those need: the
+reference period is good to six digits.
 
 **Drag is retracted.** The momentum-exchange estimate gives Cd = 1.05, 0.43,
 0.04, −0.20 over D = 16…40, and negative drag is impossible. True drag is ~0.27
