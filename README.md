@@ -9,10 +9,16 @@ loss and untouched by every stability method currently in use. Carrying phase as
 an explicit coordinate with a measured frequency makes the rollout period exact
 by construction.
 
-Two results cut against the obvious story and are reported anyway. On a cylinder
-wake at Re = 100 a well-trained free model already reaches δ ≈ 2 × 10⁻⁵, so phase
-drift does not limit it. And the first anchored parametrization tried here made
-δ *worse*, for a reason worth knowing.
+Where it bites is **parametric** models. Fitting one operating point, a free
+surrogate reaches δ ≈ 2 × 10⁻⁵ and holds a cylinder wake for ~10⁴ periods — phase
+drift is not what limits it. Ask the same architecture to interpolate ω across a
+parameter and δ inflates by two orders of magnitude: 71 periods to decorrelation
+at held-out parameters, 2 periods when extrapolating. Anchoring recovers 11× of
+that.
+
+Two results that cut against the obvious story are reported anyway: the
+single-point wake above, and the fact that the first anchored parametrization
+tried here made δ *worse*, for a reason worth knowing.
 
 Every number below comes from the scripts in this repository.
 
@@ -227,9 +233,12 @@ underperform — median δ is 1.20, a 120% period error, with some seeds NaN.
 | 32 | 960×640 | 0.16889 | +2.79% | 5.0 × 10⁻⁷ |
 | 40 | 1200×800 | 0.16903 | +2.88% | 5.3 × 10⁻⁷ |
 
-St converges to ≈0.169 rather than Williamson's unconfined 0.1643. The obvious
-explanation, blockage, is **wrong**: opening the domain from 5% to 1.7% blockage
-at fixed D leaves St at ~0.169 and does not move it monotonically.
+St converges to ≈0.169 rather than Williamson's unconfined 0.1643. It took three
+hypotheses to find the cause, and the first two are recorded because they are the
+ones a reader would try.
+
+Blockage is **not** it: opening the domain from 5% to 1.7% blockage at fixed D
+leaves St at ~0.169 and does not move it monotonically.
 
 | ny/D | blockage | St | vs 0.1643 |
 |---|---|---|---|
@@ -238,10 +247,31 @@ at fixed D leaves St at ~0.169 and does not move it monotonically.
 | 40 | 2.50% | 0.16930 | +3.05% |
 | 60 | 1.67% | 0.16878 | +2.72% |
 
-The remaining suspect is compressibility: these runs use Ma = 0.173, above the
-Ma < 0.1 that lattice Boltzmann practice calls for. A Mach study at fixed
-relaxation time (D scaled inversely with inflow speed) is running. Until it
-resolves, the +2.9% offset is an open discrepancy and is reported as one.
+Compressibility is **not** it either, and moves the wrong way. Holding the
+relaxation time at 0.572 and scaling D inversely with inflow speed:
+
+| u_in | D | Ma | St | vs 0.1643 |
+|---|---|---|---|---|
+| 0.100 | 24 | 0.173 | 0.16851 | +2.56% |
+| 0.0667 | 36 | 0.116 | 0.17000 | +3.47% |
+| 0.050 | 48 | 0.087 | 0.17113 | +4.16% |
+
+Lowering the Mach number makes the offset worse; extrapolating St against Ma² to
+zero Mach gives 0.17175, or +4.54%.
+
+It is **domain truncation**, at both ends:
+
+| upstream | downstream | St | vs 0.1643 |
+|---|---|---|---|
+| 8 D | 22 D | 0.16851 | +2.56% |
+| 8 D | 42 D | 0.16901 | +2.87% |
+| 16 D | 34 D | 0.16699 | +1.64% |
+| 20 D | 60 D | 0.16587 | **+0.95%** |
+
+Comparing the two runs of equal total length, moving the inlet from 8 D to 16 D
+upstream helps more than spending the same cells downstream. The original 8 D /
+22 D box was too small at both ends. At 20 D / 60 D the offset is +0.95%, which
+is consistent with staircase bounce-back at D = 24.
 
 None of this affects the δ results, which measure a surrogate against the
 solver's own period. Period jitter near 5 × 10⁻⁷ is what those need: the
@@ -254,6 +284,51 @@ cancellation, and any systematic error in the link set grows with the perimeter
 and overwhelms it. Flagged in the code and excluded from output. Strouhal comes
 from the probe and is unaffected.
 
+## Parametric oscillators: where δ actually bites
+
+Everything above fits one operating point, where the model needs a single number.
+A parametric operator — the thing a surrogate is usually built for — must produce
+ω(μ) at parameter values it never saw. That is the first place δ has a structural
+reason to be large, and it is.
+
+van der Pol, ẋ = y, ẏ = ε(1−x²)y − x, with ε trained at 0.5/0.9/1.3/1.7/2.1/2.5,
+held out at 0.7/1.1/1.5/1.9/2.3, and extrapolated to 2.9/3.3. The period runs
+6.38 → 9.25 across that range and the dependence is nonlinear, so ω(ε) is a real
+function to fit. Reference periods agree with published van der Pol values to the
+precision those are quoted at, with Poincaré jitter 2 × 10⁻⁸.
+
+Five seeds, 6000 epochs, median |δ|:
+
+| model | width | params | med MSE | train | interp | extrap |
+|---|---|---|---|---|---|---|
+| free | 96 | 19202 | 1.87 × 10⁻⁴ | 5.23 × 10⁻³ | 3.51 × 10⁻³ | 1.09 × 10⁻¹ |
+| free | 150 | 46202 | 9.91 × 10⁻⁵ | 2.48 × 10⁻³ | 2.31 × 10⁻³ | 6.37 × 10⁻² |
+| free | 224 | 102146 | 1.07 × 10⁻⁴ | 1.15 × 10⁻³ | 9.45 × 10⁻⁴ | 1.60 × 10⁻² |
+| phase-anchored | 96 | 46055 | **1.86 × 10⁻⁵** | **8.49 × 10⁻⁵** | **8.68 × 10⁻⁵** | **5.75 × 10⁻³** |
+
+The same table as usable horizons, which is the part that matters:
+
+| model | params | train | interp | extrap |
+|---|---|---|---|---|
+| free | 19202 | 48 P | 71 P | **2 P** |
+| free | 46202 | 101 P | 108 P | 4 P |
+| free | 102146 | 217 P | 265 P | 16 P |
+| phase-anchored | 46055 | 2945 P | 2879 P | 43 P |
+
+A parameter-conditioned surrogate decorrelates in 71 periods at held-out
+parameters and 2 periods outside the training range, against ~10⁴ periods for the
+same architecture at a single operating point. Phase drift is a parametric
+problem.
+
+Two things differ from the single-point case and are worth stating plainly.
+Capacity **does** buy accuracy here — δ falls from 5.2 × 10⁻³ to 1.2 × 10⁻³ across
+the width sweep — because ω(ε) is a function to represent rather than a scalar to
+locate. Five times the parameters still lands 13× short of anchoring at half the
+size. And extrapolation degrades for every model, anchoring included: 43 periods
+at ε outside the training range, against 2879 inside it. Anchoring interpolates a
+measured scalar function well and extrapolates it only somewhat better than the
+alternative.
+
 ## Limitations
 
 Stuart–Landau is a two-dimensional toy with an analytically known cycle. None of
@@ -264,19 +339,26 @@ several configurations never decorrelated within it, so those comparisons are
 censored and reported that way. The p = 0.20 correlation is weak evidence of no
 relationship, not proof of independence.
 
-For the wake, the honest summary is that the diagnostic transfers and the warning
-does not. The phase law, the loss decoupling and the insensitivity to capacity
-all reproduce on Navier–Stokes, but δ for a well-trained free model is ~2 × 10⁻⁵,
-so phase drift is not what limits a cylinder-wake surrogate. A Re = 100 wake is
-genuinely low-dimensional and near-harmonic — closer to Stuart–Landau than to a
-hard problem — and 8 POD modes on a single noise-free trajectory is the easiest
-version of the task.
+The single-point wake shows the diagnostic transferring while the warning does
+not: δ ≈ 2 × 10⁻⁵ is not what limits that surrogate. A Re = 100 wake is
+low-dimensional and near-harmonic, and 8 POD modes on one noise-free trajectory
+is the easiest version of the task.
 
-Where δ should become hard to control is where the frequency itself is hard to
-pin: operators generalising across Reynolds number, higher Re with broadband wake
-dynamics, and flexible FSI where the structure sets its own timescale. Those are
-the next cases. Until one of them shows a large δ, phase-anchoring is worth using
-for the guarantee and the training-cost saving rather than as a rescue.
+The parametric results supply the missing failure case, but on an ODE rather than
+a PDE. What has *not* been shown is a parametric **flow** surrogate with large δ —
+one operator across a range of Reynolds number, where the Strouhal curve is known
+independently. That is the experiment that would join the two halves, and it is
+the next one to run.
+
+Extrapolation is a genuine limitation rather than a detail. Every model degrades
+outside the training range, anchoring included (43 periods against 2879 inside).
+Anchoring interpolates a measured scalar function well; it does not confer
+extrapolation.
+
+The van der Pol splits are one-dimensional in parameter. Real operators condition
+on several parameters at once, where the frequency surface is harder to fit and
+the held-out points are further from their neighbours in a way a 1-D sweep does
+not capture.
 
 ## Install and run
 
