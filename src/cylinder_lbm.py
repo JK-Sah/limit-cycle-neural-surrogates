@@ -134,8 +134,9 @@ def crossings(t, s):
 
 def run(D=30, Re=100, u_in=0.1, steps=120000, warmup_frac=0.5, perturb_steps=2000,
         probe_every=5, device="cpu", snap_every=0, snap_crop=None,
-        snap_stride=1, ny_D=20, verbose=True):
-    sim = Cylinder(D=D, Re=Re, u_in=u_in, ny_D=ny_D, device=device)
+        snap_stride=1, ny_D=20, nx_D=30, xc_D=8, verbose=True):
+    sim = Cylinder(D=D, Re=Re, u_in=u_in, ny_D=ny_D, nx_D=nx_D, xc_D=xc_D,
+                   device=device)
     if verbose:
         print(f"grid {sim.nx}x{sim.ny}  D={D}  tau={sim.tau:.4f}  "
               f"nu={sim.nu:.5f}  blockage={sim.blockage*100:.1f}%  "
@@ -191,8 +192,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--D", type=int, default=30)
     ap.add_argument("--Re", type=float, default=100)
+    ap.add_argument("--u-in", type=float, default=0.1,
+                    help="lattice inflow speed; Mach = u*sqrt(3)")
     ap.add_argument("--ny-D", type=int, default=20,
                     help="domain height in diameters; sets blockage = 1/ny_D")
+    ap.add_argument("--nx-D", type=int, default=30,
+                    help="domain length in diameters")
+    ap.add_argument("--xc-D", type=int, default=8,
+                    help="cylinder centre distance from inlet, in diameters")
     ap.add_argument("--steps", type=int, default=120000)
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--snap-every", type=int, default=0)
@@ -205,12 +212,16 @@ def main():
 
     crop = None
     if a.snap_every:
-        D = a.D
-        crop = (6 * D, 22 * D, 6 * D, 14 * D)      # wake window around cylinder
-    res, sig, (snaps, snap_t) = run(D=a.D, Re=a.Re, steps=a.steps,
+        D, xc, nyd = a.D, a.xc_D, a.ny_D
+        # wake window: 2D upstream to 14D downstream, +/-4D across
+        crop = ((xc - 2) * D, (xc + 14) * D,
+                (nyd // 2 - 4) * D, (nyd // 2 + 4) * D)
+    res, sig, (snaps, snap_t) = run(D=a.D, Re=a.Re, u_in=a.u_in,
+                                    steps=a.steps,
                                     device=a.device, snap_every=a.snap_every,
                                     snap_crop=crop, snap_stride=a.snap_stride,
-                                    ny_D=a.ny_D)
+                                    ny_D=a.ny_D, nx_D=a.nx_D,
+                                    xc_D=a.xc_D)
     print("\n" + json.dumps(res, indent=1))
     if "St" in res:
         print(f"\nSt = {res['St']:.5f}   (Williamson 1989 correlation at "
@@ -224,8 +235,9 @@ def main():
     if a.save_snaps and snaps is not None:
         np.savez_compressed(a.save_snaps, snaps=snaps, t=snap_t,
                             T_lattice=res.get("T_lattice", np.nan),
-                            D=a.D, u_in=res["u_in"], St=res.get("St", np.nan),
-                            snap_stride=a.snap_stride)
+                            D=a.D, Re=a.Re, u_in=res["u_in"],
+                            St=res.get("St", np.nan),
+                            snap_stride=a.snap_stride, crop=np.array(crop))
         print(f"saved {snaps.shape} snapshots")
 
 
