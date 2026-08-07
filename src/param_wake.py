@@ -98,35 +98,82 @@ class FreeParametric(nn.Module):
         return self.net(torch.cat([a, mu], -1))
 
 
+def fit_omega(mode, mu_train, om_train, re_train):
+    """
+    Fit a CONSTRAINED interpolant to the measured training frequencies.
+
+    This replaces supervising a free MLP at the sampled parameters. That version
+    pinned omega where it was supervised and wiggled between: on the wake it gave
+    median interpolation delta 1.96e-3 with a worst case of 1.42e-1, far worse
+    than an unconstrained baseline. Nothing forced the interpolant to be smooth.
+
+    Because the rollout period is exactly 2*pi/omega(mu), a frozen interpolant
+    makes delta computable in closed form BEFORE any network is trained -- the
+    frequency interpolant can be chosen by cross-validation on measured
+    frequencies alone.
+    """
+    if mode == "poly4":
+        return np.polyfit(mu_train, om_train, 4)
+    if mode == "williamson":
+        # St = a/Re + b + c Re (Williamson 1989); omega inherits the form
+        A = np.stack([1.0 / re_train, np.ones_like(re_train), re_train], 1)
+        return np.linalg.lstsq(A, om_train, rcond=None)[0]
+    raise ValueError(mode)
+
+
 class PhaseAnchoredParametric(nn.Module):
     """
     phi' = omega(mu),  a = Z(phi, mu) + s,  s' = g(s, phi, mu)
 
-    omega is supervised at the training Re only. At a held-out Re the rollout
-    period is exactly 2*pi/omega(mu), so delta there is the interpolation error
-    of a smooth scalar function fitted to measured frequencies.
+    omega is a FROZEN interpolant fitted to measured training frequencies, not a
+    learned function. The rollout period is exactly 2*pi/omega(mu), so delta at
+    a held-out parameter is exactly the interpolation error of that curve.
+
+    omega_mode:
+      poly4       degree-4 least squares in the normalised parameter
+      williamson  a/Re + b + c Re, the physical form of the Strouhal curve
+      mlp         the failed ablation: a free MLP supervised at training Re only
     """
-    def __init__(self, r, n_harm=8, width=128, depth=3, w_head=64):
+    def __init__(self, r, n_harm=8, width=128, depth=3, w_head=64,
+                 omega_mode="williamson", omega_fit=None):
         super().__init__()
-        self.r, self.n_harm = r, n_harm
+        self.r, self.n_harm, self.omega_mode = r, n_harm, omega_mode
         self.register_buffer("harm", torch.arange(
             n_harm + 1, dtype=torch.get_default_dtype()))
-        self.omega_net = _mlp(1, 1, w_head, 2)
+        if omega_mode == "mlp":
+            self.omega_net = _mlp(1, 1, w_head, 2)
+        else:
+            self.register_buffer("om_coef",
+                                 torch.tensor(np.asarray(omega_fit)))
         self.coef_net = _mlp(1, 2 * (n_harm + 1) * r, width, depth)
         self.g = _mlp(r + 3, r, width, depth)
 
     def omega(self, mu):
-        return nn.functional.softplus(self.omega_net(mu)) + 1e-3
+        if self.omega_mode == "mlp":
+            return nn.functional.softplus(self.omega_net(mu)) + 1e-3
+        if self.omega_mode == "poly4":
+            out = torch.zeros_like(mu)
+            for c in self.om_coef:
+                out = out * mu + c
+            return out
+        Re = 130.0 + 70.0 * mu                      # undo the normalisation
+        a, b, c = self.om_coef
+        return a / Re + b + c * Re
 
-    def Z(self, phi, mu):
+    def coefs(self, mu):
+        """Fourier coefficients of the loop at this parameter."""
         c = self.coef_net(mu)
-        c = c.view(*c.shape[:-1], 2, self.n_harm + 1, self.r)
+        return c.view(*c.shape[:-1], 2, self.n_harm + 1, self.r)
+
+    def Z(self, phi, mu=None, c=None):
+        if c is None:
+            c = self.coefs(mu)
         ang = phi.unsqueeze(-1) * self.harm
         return ((ang.cos().unsqueeze(-1) * c[..., 0, :, :]).sum(-2)
                 + (ang.sin().unsqueeze(-1) * c[..., 1, :, :]).sum(-2))
 
-    def decode(self, phi, s, mu):
-        return self.Z(phi, mu) + s
+    def decode(self, phi, s, mu=None, c=None):
+        return self.Z(phi, mu, c) + s
 
     def forward(self, state, mu):
         phi, s = state[..., :1], state[..., 1:]
@@ -154,9 +201,10 @@ def rollout_delta(model, kind, mu, T_true_model, dt, n_periods, a0):
     if kind == "free":
         tr = rk4(model, a0.unsqueeze(0), m, dt, n)[:, 0, :].numpy()
     else:
+        c = model.coefs(m)                  # mu is fixed along this rollout
         st = model.init_state(a0.unsqueeze(0), torch.zeros(1, 1), m)
         tj = rk4(model, st, m, dt, n)
-        tr = model.decode(tj[..., 0], tj[..., 1:], m)[:, 0, :].numpy()
+        tr = model.decode(tj[..., 0], tj[..., 1:], c=c)[:, 0, :].numpy()
     if not np.isfinite(tr).all():
         return None, None
     t = np.arange(len(tr)) * dt
@@ -175,7 +223,11 @@ def main():
     ap.add_argument("--seed-list", type=int, nargs="+", default=[0])
     ap.add_argument("--free-widths", type=int, nargs="+", default=[128, 200, 288])
     ap.add_argument("--harmonics", type=int, default=8)
-    ap.add_argument("--w-sup", type=float, default=1e3)
+    ap.add_argument("--w-sup", type=float, default=1e3,
+                    help="only used by the failed --omega-mode mlp ablation")
+    ap.add_argument("--omega-modes", nargs="+",
+                    default=["williamson", "poly4"],
+                    choices=["williamson", "poly4", "mlp"])
     ap.add_argument("--out", default="param_wake.json")
     a = ap.parse_args()
 
@@ -240,16 +292,43 @@ def main():
     mu_sup = torch.tensor([[mu(R)] for R in TRAIN_RE])
     om_sup = torch.tensor([[om[R]] for R in TRAIN_RE])
 
+    # Fit the frozen frequency interpolants and report the delta each one
+    # implies, analytically, before training anything. The anchored rollout
+    # period is exactly 2*pi/omega(mu), so these are what the model must achieve.
+    mu_tr = np.array([mu(R) for R in TRAIN_RE])
+    om_tr = np.array([om[R] for R in TRAIN_RE])
+    re_tr = np.array([float(R) for R in TRAIN_RE])
+    fits, pred_delta = {}, {}
+    print("frozen frequency interpolants, delta predicted in closed form:")
+    for m_ in [x for x in a.omega_modes if x != "mlp"]:
+        fits[m_] = fit_omega(m_, mu_tr, om_tr, re_tr)
+        tmp = PhaseAnchoredParametric(a.modes, omega_mode=m_, omega_fit=fits[m_])
+        with torch.no_grad():
+            pr = {R: float(tmp.omega(torch.tensor([[mu(R)]]))) for R in allre}
+        pred_delta[m_] = {R: (pr[R] - om[R]) / om[R] for R in allre}
+        line = []
+        for tag, grp in [("train", TRAIN_RE), ("interp", INTERP_RE),
+                         ("extrap", EXTRAP_RE)]:
+            d = np.median([abs(pred_delta[m_][R]) for R in grp])
+            line.append(f"{tag} {d:.2e} ({1/(4*d):.0f}P)")
+        print(f"  {m_:>11}: " + "  ".join(line))
+    print()
+
     configs = ([("free", w) for w in a.free_widths]
-               + [("phase-anchored", 128)])
+               + [(f"anchored[{m_}]", 128) for m_ in a.omega_modes])
     rows = []
     for kind, width in configs:
         for seed in a.seed_list:
             t0 = time.time()
             torch.manual_seed(seed)
-            model = (FreeParametric(a.modes, width=width) if kind == "free"
-                     else PhaseAnchoredParametric(a.modes, n_harm=a.harmonics,
-                                                  width=width))
+            if kind == "free":
+                model = FreeParametric(a.modes, width=width)
+                om_mode = None
+            else:
+                om_mode = kind[kind.index("[") + 1:-1]
+                model = PhaseAnchoredParametric(
+                    a.modes, n_harm=a.harmonics, width=width,
+                    omega_mode=om_mode, omega_fit=fits.get(om_mode))
             npar = sum(p.numel() for p in model.parameters())
             opt = torch.optim.Adam(model.parameters(), lr=2e-3)
             sch = torch.optim.lr_scheduler.CosineAnnealingLR(opt, a.epochs)
@@ -265,7 +344,8 @@ def main():
                     pred = model.decode(tj[..., 0], tj[..., 1:], bm)
                 loss = ((pred - b.transpose(0, 1)) ** 2).mean()
                 mse = loss.item()
-                if kind != "free":
+                if om_mode == "mlp":
+                    # only the failed ablation learns omega and needs this
                     loss = loss + a.w_sup * ((model.omega(mu_sup)
                                               - om_sup) ** 2).mean()
                 loss.backward()
@@ -280,7 +360,10 @@ def main():
                                       a.periods, a0)
                 rows.append(dict(kind=kind, width=width, seed=seed, Re=R,
                                  split=tag, nparam=npar, train_mse=mse,
-                                 delta=d, T_model_true=T_model[R], T_pred=Tm))
+                                 delta=d, T_model_true=T_model[R], T_pred=Tm,
+                                 delta_predicted=(
+                                     pred_delta[om_mode][R]
+                                     if om_mode in pred_delta else None)))
             cell = {}
             for tag in ["train", "interp", "extrap"]:
                 ds = [abs(r["delta"]) for r in rows if r["kind"] == kind
@@ -307,6 +390,8 @@ def main():
             kind, width, g[0]["nparam"], *c))
 
     json.dump(dict(rows=rows, T_lat=T_lat, St_meas=St_meas,
+                   omega_fits={k: np.asarray(v).tolist()
+                               for k, v in fits.items()},
                    T_model={str(k): v for k, v in T_model.items()},
                    energy=energy[:a.modes].tolist(), dt=dt,
                    train_re=TRAIN_RE, interp_re=INTERP_RE,
