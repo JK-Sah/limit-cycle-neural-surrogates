@@ -408,6 +408,76 @@ Anchoring also gives up the determinism it had at a single operating point: seed
 spread is 29–171× here, against 2–12× for the free baseline, because Z and g are
 now parameter-dependent networks rather than fixed ones.
 
+## Classical baselines: the pathology is not neural-specific
+
+Two standard reduced-order models, measured with the same estimator on the same
+POD basis. DMD fits a one-step linear map, so its frequency is an explicit
+eigenvalue. Operator inference fits the quadratic form adot = c + La + Q(a,a),
+the data-driven version of POD-Galerkin; intrusive Galerkin is avoided because
+the snapshots live on a cropped window where the discarded boundary terms do not
+vanish.
+
+**The mechanism shows up in DMD, from a plain least-squares fit.** The dominant
+discrete-time eigenvalue sits on the unit circle to eight decimals:
+
+| Re | \|λ\| | δ |
+|---|---|---|
+| 80 | 1.00000000 | +4.06 × 10⁻⁷ |
+| 100 | 1.00000000 | −1.98 × 10⁻⁸ |
+| 130 | 1.00000000 | −2.72 × 10⁻⁷ |
+| 180 | 0.99999995 | −7.30 × 10⁻⁶ |
+
+That is the discrete-time signature of the neutrally stable phase direction,
+found by a method with no neural network in it. The Floquet argument is not an
+artifact of how the surrogates were trained.
+
+### At one operating point, do not use a neural network
+
+| method | median \|δ\| | horizon | stable |
+|---|---|---|---|
+| phase-anchored | 2.75 × 10⁻⁸ | 9090909 P | 5/5 |
+| **DMD (classical)** | **6.92 × 10⁻⁷** | **361247 P** | 6/6 |
+| free neural ODE | 2.59 × 10⁻⁵ | 9653 P | 5/5 |
+| operator inference | 7.03 × 10⁻³ | 36 P | 4/6 |
+
+A linear least-squares fit gets the frequency **37× better than a trained neural
+ODE**, at a small fraction of the cost. Anyone reporting a neural surrogate on a
+single-parameter limit cycle without a DMD baseline is reporting against a weak
+baseline.
+
+### Parametrically, the ordering reverses
+
+Operators fitted per training Re and interpolated entrywise, the standard
+parametric-ROM construction, evaluated at held-out Re:
+
+| method | median \|δ\| | horizon | stable |
+|---|---|---|---|
+| **phase-anchored** | **2.92 × 10⁻⁴** | **856 P** | 4/4 |
+| free neural ODE | 5.36 × 10⁻⁴ | 466 P | 4/4 |
+| operator inference | 6.47 × 10⁻³ | 39 P | 2/5 |
+| DMD (classical) | 7.64 × 10⁻² | 3 P | 5/5 |
+
+DMD goes from best to worst, losing five orders of magnitude. Interpolating
+operator entries does not preserve eigenvalue structure: small entrywise errors
+move eigenvalues far, and the frequency is an eigenvalue. Operator inference is
+unstable at three of five held-out Re and at both extrapolation points.
+
+### What this means
+
+The period error is not a neural pathology. It is a property of how a method
+represents frequency:
+
+- DMD puts it in an eigenvalue. Excellent at a fitted operating point, fragile
+  under operator interpolation.
+- A learned vector field lets it emerge from field matching. Mediocre at one
+  point, but degrades gracefully across parameters.
+- Anchoring imposes it from measurement. Best in-distribution, and it fails
+  outside the training range for the separate reason given above.
+
+The practical reading is that the choice of surrogate should be made on which
+regime is needed, and that δ should be reported in either case, because no
+method's training loss reveals it.
+
 ## Limitations
 
 Stuart–Landau is a two-dimensional toy with an analytically known cycle. None of
