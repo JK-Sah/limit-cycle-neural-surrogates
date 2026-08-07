@@ -11,10 +11,16 @@ by construction.
 
 Where it bites is **parametric** models. Fitting one operating point, a free
 surrogate reaches δ ≈ 2 × 10⁻⁵ and holds a cylinder wake for ~10⁴ periods — phase
-drift is not what limits it. Ask the same architecture to interpolate ω across a
-parameter and δ inflates by two orders of magnitude: 71 periods to decorrelation
-at held-out parameters, 2 periods when extrapolating. Anchoring recovers 11× of
-that.
+drift is not what limits it. Condition the same architecture on a parameter and
+δ inflates by two orders of magnitude, on an ODE and on Navier–Stokes alike:
+~500 periods to decorrelation at held-out Reynolds numbers, 14 when
+extrapolating.
+
+Anchoring the phase to a measured frequency recovers most of that
+in-distribution — 13× at training parameters — but **not** outside the training
+range, where it is worse than doing nothing. The guarantee covers the phase
+variable, not the decoded observable, and the difference is demonstrated rather
+than assumed.
 
 Two results that cut against the obvious story are reported anyway: the
 single-point wake above, and the fact that the first anchored parametrization
@@ -328,6 +334,79 @@ size. And extrapolation degrades for every model, anchoring included: 43 periods
 at ε outside the training range, against 2879 inside it. Anchoring interpolates a
 measured scalar function well and extrapolates it only somewhat better than the
 alternative.
+
+## Parametric wake: one operator across Reynolds number
+
+The van der Pol result is an ODE; the single-Re wake is one operating point.
+This joins them. D2Q9 lattice Boltzmann at Re = 80…220, trained at
+80/100/120/140/160/180, held out at 90/110/130/150/170, extrapolated to
+200/220. Solver Strouhal tracks the Williamson correlation with mean offset
++0.09% and spread 0.90%, monotonic in Re. The POD basis is built from the
+training Re only, so held-out Re never enters the representation.
+
+Four seeds, 6000 epochs:
+
+| model | params | med MSE | train | interp | extrap |
+|---|---|---|---|---|---|
+| free | 37392 | 8.50 × 10⁻⁶ | 7.22 × 10⁻⁴ | 7.12 × 10⁻⁴ | 3.36 × 10⁻² |
+| free | 176272 | 5.38 × 10⁻⁶ | 3.63 × 10⁻⁴ | 5.36 × 10⁻⁴ | 1.81 × 10⁻² |
+| anchored, poly4 ω | 108080 | 8.31 × 10⁻⁶ | **2.69 × 10⁻⁵** | **2.92 × 10⁻⁴** | 1.74 × 10⁻¹ |
+| anchored, Williamson ω | 108080 | 8.33 × 10⁻⁶ | 4.79 × 10⁻⁴ | 6.75 × 10⁻⁴ | 1.72 × 10⁻¹ |
+
+As horizons:
+
+| model | train | interp | extrap |
+|---|---|---|---|
+| free (best) | 688 P | 466 P | 14 P |
+| anchored, poly4 ω | **9301 P** | **856 P** | **1 P** |
+
+**The failure case is confirmed.** A free parametric wake operator holds ~500
+periods at held-out Re and 14 at extrapolated Re, against ~10⁴ periods for the
+same architecture at a single Reynolds number, at unchanged training MSE. Seed
+spread is 2–3×, so this is a property of the setting, not a lottery.
+
+### The guarantee covers the phase, not the observable
+
+Anchoring wins in-distribution — 13× at training Re, 1.8× at interpolated Re —
+and loses badly outside it, at 1 P against the free baseline's 14 P.
+
+Comparing predicted δ (computable in closed form from the frozen interpolant)
+against what the trained model achieves:
+
+| ω interpolant | split | predicted | measured | ratio |
+|---|---|---|---|---|
+| poly4 | train | 1.36 × 10⁻⁵ | 2.69 × 10⁻⁵ | 1.97 |
+| poly4 | interp | 6.89 × 10⁻⁵ | 2.92 × 10⁻⁴ | 4.24 |
+| poly4 | extrap | 5.99 × 10⁻³ | 1.74 × 10⁻¹ | **29.0** |
+| Williamson | train | 4.52 × 10⁻⁴ | 4.79 × 10⁻⁴ | 1.06 |
+| Williamson | interp | 3.68 × 10⁻⁴ | 6.75 × 10⁻⁴ | 1.84 |
+| Williamson | extrap | 1.49 × 10⁻³ | 1.72 × 10⁻¹ | **115.6** |
+
+The model meets its predicted δ at training parameters (ratio 1.06) and misses it
+by two orders of magnitude outside the training range. The cause is identifiable
+rather than speculative. The two interpolants have predicted extrapolation errors
+differing by 4×, so if the failure came from ω their measured errors would differ
+too. Per seed at Re = 200 and 220 they instead coincide:
+
+| Re | seed | poly4 | Williamson | ratio |
+|---|---|---|---|---|
+| 200 | 0 | 2.050 × 10⁻¹ | 2.022 × 10⁻¹ | 1.01 |
+| 200 | 1 | 1.168 × 10¹ | 1.105 × 10¹ | 1.06 |
+| 200 | 2 | 1.075 × 10⁻¹ | 1.081 × 10⁻¹ | 0.99 |
+| 220 | 0 | 1.839 × 10⁻¹ | 1.843 × 10⁻¹ | 1.00 |
+
+At interpolated Re the same comparison gives ratios from 0.02 to 1.46, so ω does
+matter there. The extrapolation failure is therefore not the frequency.
+
+The reason is structural. The observable is a = Z(φ, μ) + s, and its period
+equals 2π/ω(μ) only when the transverse part s decays and Z is a faithful loop.
+Both are learned functions of μ. At an unseen μ they are out of distribution, s
+does not settle, and the decoded signal carries a spurious component regardless
+of how exact the phase is. **Anchoring the phase does not anchor the observable.**
+
+Anchoring also gives up the determinism it had at a single operating point: seed
+spread is 29–171× here, against 2–12× for the free baseline, because Z and g are
+now parameter-dependent networks rather than fixed ones.
 
 ## Limitations
 
