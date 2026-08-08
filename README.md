@@ -478,6 +478,63 @@ The practical reading is that the choice of surrogate should be made on which
 regime is needed, and that δ should be reported in either case, because no
 method's training loss reveals it.
 
+### Two properties, both necessary, neither preserved
+
+The parametric DMD result above interpolates operator entries, which is common
+practice but not the best a careful person would do. Doing it properly turns out
+to isolate the mechanism exactly.
+
+Operators fitted at a single Re have spectral radius 1 to eight decimals — the
+neutral phase direction, recovered by least squares with no network involved.
+Interpolating between them destroys it:
+
+| | spectral radius |
+|---|---|
+| fitted directly at each Re | 1.00000001 – 1.00000845 |
+| entry-interpolated | 1.10 – **31.05** |
+
+Neutrally-stable operators are a measure-zero set, and linear interpolation
+leaves it immediately. A 100-period rollout is ~3000 steps, so this diverges.
+
+Repairing the interpolated spectrum one property at a time, over 13 Reynolds
+numbers:
+
+| construction | train | interp | stable |
+|---|---|---|---|
+| entry interpolation | diverges | diverges | 0/13 |
+| mode-matched eigen-interpolation | 3.95 × 10⁻³ (63 P) | 2.21 × 10⁻³ (113 P) | 4/11 |
+| generic stabilisation (clip \|λ\|≤1) | 4.81 × 10⁻¹ (1 P) | 4.15 × 10⁻¹ (1 P) | 6/11 |
+| + neutrality on the dominant pair | 2.83 × 10⁻² (9 P) | 7.64 × 10⁻² (3 P) | 11/11 |
+| **+ imposed measured frequency** | **4.53 × 10⁻⁴ (552 P)** | **3.68 × 10⁻⁴ (679 P)** | 11/11 |
+| *frequency interpolant's own error* | *4.53 × 10⁻⁴ (552 P)* | *3.69 × 10⁻⁴ (678 P)* | — |
+
+Read the last two rows together. Imposing neutrality and frequency reproduces the
+frequency interpolant's error to four significant figures, 4.525 × 10⁻⁴ against a
+predicted 4.526 × 10⁻⁴. The same closed-form predictability the anchored neural
+model has, now for a classical linear ROM.
+
+Neither property suffices alone. Neutrality without the frequency stabilises
+every rollout but leaves a 3-period horizon. The frequency without neutrality
+diverges, because correcting the imaginary part of an eigenvalue does nothing
+about a real part sitting at 1.1 to 31. Generic stabilisation, which clips
+eigenvalues without knowing which one carries the phase, is worse than useless.
+
+Careful eigen-interpolation is not a way out: matching modes across Re and
+interpolating eigenvalues and gauge-fixed eigenvectors still diverges in 7 of 11
+cases. Preserving neutrality is genuinely hard, not a matter of being tidier.
+
+**This is the paper's thesis, stated at the right level of generality.** Long-horizon
+fidelity of a surrogate of a limit cycle is controlled by two spectral properties
+of its phase direction: neutrality, and frequency. Standard construction
+preserves neither — not training on field error, not interpolating operators —
+and the reported error metric shows neither. Impose both and δ equals the
+precision of the frequency estimate, whether the model is a linear ROM or a
+neural latent ODE.
+
+Extrapolation fails for every construction here (δ ≈ 1.3, horizon 0 P), matching
+the neural result and for the same reason: the mode structure itself is out of
+distribution.
+
 ## Limitations
 
 Stuart–Landau is a two-dimensional toy with an analytically known cycle. None of
