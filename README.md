@@ -582,6 +582,64 @@ DMD's seed spread is exactly 1.0×, being a closed-form fit with no seed
 dependence. Every learned model spreads between 3.5× and 3.8 × 10⁷×. Reporting a
 single seed for a learned surrogate says almost nothing about its δ.
 
+## Truncation, and a second blind spot
+
+DMD gave δ = 2 × 10⁻⁸ in one run and 4.6 × 10⁻⁴ in another at the same Reynolds
+number. Two things differed, mode count and POD basis, so both were swept.
+
+**Truncation is not the cause.** δ against retained modes at Re = 100, three
+seeds, usable horizon in periods:
+
+| architecture | 4 | 8 | 12 | 16 | 24 | 32 |
+|---|---|---|---|---|---|---|
+| DMD (least squares) | 544 | 546 | 545 | 544 | 542 | 542 |
+| linear-sgd | 6980 | 5507 | 6391 | 3101 | 3701 | 3340 |
+| ode-mlp | 8343 | 5481 | 8571 | 5188 | **20** | **0** |
+| ode-deep | 38993 | 17709 | 9444 | 3611 | 7234 | 225594 |
+| ar-residual | 13091 | 3521 | 1026 | 5466 | 1611 | **0** |
+| ar-direct | 57678 | 831 | 750 | 729 | 1597 | 1663 |
+| gru | 0 | 0 | 6 | 24 | 23 | 0 |
+
+DMD is flat to within 0.7% across an eightfold change in dimension. What the
+sweep does show is that **more modes actively harm nonlinear learned models**:
+`ode-mlp` holds ~5000 periods up to 16 modes and collapses to 20 and then 0 at
+24 and 32; `ar-residual` collapses at 32. The added directions carry almost no
+energy (modes 17–20 hold 7 × 10⁻⁵ of the total) but are poorly constrained by
+data, and the rollout destabilises. `linear-sgd` is the most robust learned
+model across the sweep, which is a point in favour of simple latent dynamics.
+
+**The cause was the basis.** DMD at Re = 100, matched mode count, basis built
+two ways:
+
+| basis | modes | energy captured | δ | horizon |
+|---|---|---|---|---|
+| Re = 100 only | 8 | 99.979% | +4.60 × 10⁻⁴ | 544 P |
+| Re = 100 only | 16 | 99.99993% | +4.58 × 10⁻⁴ | 546 P |
+| pooled over 6 Re | 8 | 98.315% | −1.20 × 10⁻⁷ | 2092673 P |
+| pooled over 6 Re | 16 | 99.741% | −1.98 × 10⁻⁸ | 12609030 P |
+
+3800× better δ at 8 modes, from a basis that captures **less** energy — 98.3%
+against 99.98%. The energy-optimal representation is the worse one for the
+period, and by a wide margin.
+
+The reason is that POD truncation minimises L² reconstruction error, and a
+single-Re basis is optimally packed: every retained mode carries real energy and
+the small discarded tail is exactly the dynamically active closure term. A basis
+pooled across Reynolds numbers is oriented to span variation the Re = 100
+trajectory barely excites, so that trajectory sits near a genuinely linear
+subspace and the unmodelled content does not feed back into the frequency.
+
+This extends the paper's thesis rather than complicating it. Training loss does
+not see δ; POD energy does not see it either. Both are L² reconstruction
+criteria, and δ is a spectral property orthogonal to both. **Two independent
+stages of the standard pipeline — basis selection by energy, then fitting by
+field error — are each blind to the quantity that sets long-horizon fidelity.**
+
+*Retracted from an earlier version of this section:* correlations between
+unresolved POD energy and δ (ρ ≈ −0.66 to −0.87). Those are artefacts. For DMD
+δ varies by 0.7% across the sweep, so the correlation is fitted to noise; for
+`ode-mlp` it is driven by two blow-ups at high mode count rather than any trend.
+
 ## Limitations
 
 Stuart–Landau is a two-dimensional toy with an analytically known cycle. None of
