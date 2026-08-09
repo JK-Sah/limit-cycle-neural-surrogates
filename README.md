@@ -431,19 +431,21 @@ That is the discrete-time signature of the neutrally stable phase direction,
 found by a method with no neural network in it. The Floquet argument is not an
 artifact of how the surrogates were trained.
 
-### At one operating point, do not use a neural network
+### At one operating point (superseded — see the controlled comparison below)
 
 | method | median \|δ\| | horizon | stable |
 |---|---|---|---|
 | phase-anchored | 2.75 × 10⁻⁸ | 9090909 P | 5/5 |
-| **DMD (classical)** | **6.92 × 10⁻⁷** | **361247 P** | 6/6 |
-| free neural ODE | 2.59 × 10⁻⁵ | 9653 P | 5/5 |
-| operator inference | 7.03 × 10⁻³ | 36 P | 4/6 |
+| DMD, 16 modes | 6.92 × 10⁻⁷ | 361247 P | 6/6 |
+| free neural ODE, 8 modes | 2.59 × 10⁻⁵ | 9653 P | 5/5 |
+| operator inference, 16 modes | 7.03 × 10⁻³ | 36 P | 4/6 |
 
-A linear least-squares fit gets the frequency **37× better than a trained neural
-ODE**, at a small fraction of the cost. Anyone reporting a neural surrogate on a
-single-parameter limit cycle without a DMD baseline is reporting against a weak
-baseline.
+**These rows are not directly comparable and an earlier reading of them was
+wrong.** The DMD entries use 16 modes on the D = 24 sweep data; the neural entry
+uses 8 modes on the older D = 16 data. Two variables differ. A controlled
+comparison at 8 modes on identical data reverses the ordering, and DMD's own δ
+moves by four orders of magnitude with mode count. The claim that a linear fit
+beats a neural ODE by 37× is **retracted**.
 
 ### Parametrically, the ordering reverses
 
@@ -534,6 +536,51 @@ neural latent ODE.
 Extrapolation fails for every construction here (δ ≈ 1.3, horizon 0 P), matching
 the neural result and for the same reason: the mode structure itself is out of
 distribution.
+
+## Architecture breadth
+
+Same wake at Re = 100, same 8-mode POD basis, same data, same δ estimator, five
+seeds. This is the controlled single-point comparison.
+
+| model | params | med MSE | med \|δ\| | seed spread | horizon |
+|---|---|---|---|---|---|
+| DMD (least squares) | 64 | — | 4.58 × 10⁻⁴ | **1.0×** | 546 P |
+| linear-sgd | 64 | 2.81 × 10⁻⁴ | 7.57 × 10⁻⁵ | 22× | 3303 P |
+| ode-mlp | 20264 | 1.89 × 10⁻⁶ | 4.07 × 10⁻⁵ | 47× | 6144 P |
+| ode-deep | 114440 | 6.87 × 10⁻⁶ | 1.86 × 10⁻⁵ | 3.8 × 10⁷× | 13431 P |
+| ar-residual | 20264 | 6.43 × 10⁻⁵ | 1.42 × 10⁻⁴ | 3.5× | 1758 P |
+| ar-direct | 20264 | 3.32 × 10⁻⁴ | 9.71 × 10⁻⁵ | 82× | 2574 P |
+| **gru** | 31304 | 4.88 × 10⁻⁵ | **4.07 × 10¹** | 5.3 × 10⁴× | **0 P** |
+
+Every learned architecture has the pathology and the magnitude spans six orders
+of magnitude. Across all 30 runs, training loss and δ are uncorrelated
+(Spearman ρ = +0.34, p = 0.066).
+
+### The training horizon matters more than the model class
+
+`linear-sgd` is exactly DMD's hypothesis class — one matrix — fitted by Adam on a
+25-step rollout instead of by least squares on one step. It is **6× better**
+(7.57 × 10⁻⁵ against 4.58 × 10⁻⁴). The prediction going in was the opposite: that
+gradient descent would lose to the closed-form solution and show the optimiser
+was at fault.
+
+The reason is the objective, not the optimiser. One-step least squares does not
+penalise accumulated phase error; a multi-step rollout loss does. Same model,
+same data, same number of parameters, 6× the horizon.
+
+### A recurrent model can fit well and have no cycle at all
+
+The GRU reaches training MSE 4.88 × 10⁻⁵, better than both linear-sgd and
+ar-direct, which work. Its δ is 40.7 — the period is wrong by a factor of forty,
+and the usable horizon is zero. A recurrent hidden state carries dynamics of its
+own and drifts over a long rollout, and nothing in the training objective sees
+it. This is the sharpest instance of the decoupling in the whole study.
+
+### Deterministic fits are reproducible; learned ones are not
+
+DMD's seed spread is exactly 1.0×, being a closed-form fit with no seed
+dependence. Every learned model spreads between 3.5× and 3.8 × 10⁷×. Reporting a
+single seed for a learned surrogate says almost nothing about its δ.
 
 ## Limitations
 
