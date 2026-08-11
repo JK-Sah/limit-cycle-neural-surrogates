@@ -29,18 +29,11 @@ J2 = torch.tensor([[0.0, -1.0], [1.0, 0.0]])
 
 
 # ------------------------------------------------------------------ utilities
-def period_from_signal(t, s, edge_frac=0.1):
-    """
-    Period by linear fit to the unwrapped phase of the analytic signal.
-    Robust where zero-crossing counting is not: additive noise puts several
-    spurious crossings around each true one and collapses the estimate.
-    """
-    s = np.asarray(s, dtype=float)
-    s = s - s.mean()
-    ph = np.unwrap(np.angle(hilbert(s)))
-    k = max(1, int(edge_frac * len(s)))          # drop Hilbert edge transients
-    slope = np.polyfit(t[k:-k], ph[k:-k], 1)[0]
-    return float(2 * math.pi / abs(slope))
+# Period estimation lives in period.py. The Hilbert phase-regression estimator
+# used here previously is unbiased for a pure sinusoid but not for anything with
+# harmonics: it reports 1.2e-5 on a wake-like signal of exactly known period.
+# That contaminated every cross-method comparison below ~1e-5.
+from period import period_from_signal            # noqa: E402,F401
 
 
 def pod(snaps, r):

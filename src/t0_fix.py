@@ -25,7 +25,7 @@ import argparse, json, math, time
 import numpy as np
 import torch
 import torch.nn as nn
-from scipy.signal import hilbert
+from period import period_from_signal
 
 from t0_falsify import (SL, VF, rk4, make_data, learned_period, floquet,
                         drift_decomposition, decorrelation_time)
@@ -95,12 +95,14 @@ def measured_invariants(sys, dt=1e-3, n_cyc=40, noise=0.0, seed=0):
     cycle, then estimate period and amplitude from the observed trajectory.
     `noise` emulates finite sensor/solver precision.
 
-    The period comes from a linear fit to the unwrapped phase of the analytic
-    signal. Naive zero-crossing detection must NOT be used here: additive noise
-    puts several spurious crossings around each true one, which inflates the
-    crossing count and collapses the estimated period (at noise=1e-3 it reports
-    a 25% period error that is entirely an artifact of the estimator).
-    Amplitude uses a median for the same robustness reason.
+    The period comes from a Fourier fit with unknown fundamental (period.py).
+    Naive zero-crossing detection must NOT be used here: additive noise puts
+    several spurious crossings around each true one, which inflates the crossing
+    count and collapses the estimate (at noise=1e-3 it reports a 25% period
+    error that is entirely an artifact of the estimator). The Hilbert phase
+    regression used previously is unbiased on a Stuart-Landau orbit, which is
+    very nearly sinusoidal, but biased on harmonic-rich signals, so the whole
+    study now shares one estimator. Amplitude uses a median for robustness.
 
     Returns (T_measured, r_measured).
     """
@@ -110,10 +112,7 @@ def measured_invariants(sys, dt=1e-3, n_cyc=40, noise=0.0, seed=0):
     if noise:
         traj = traj + rng.normal(0, noise, traj.shape)
 
-    k = max(1, len(t) // 10)                    # drop Hilbert edge transients
-    ph = np.unwrap(np.angle(hilbert(traj[:, 1] - traj[:, 1].mean())))
-    slope = np.polyfit(t[k:-k], ph[k:-k], 1)[0]
-    T = float(2 * math.pi / abs(slope))
+    T = period_from_signal(t, traj[:, 1])
     r = float(np.median(np.linalg.norm(traj[len(traj) // 2:], axis=1)))
     return T, r
 

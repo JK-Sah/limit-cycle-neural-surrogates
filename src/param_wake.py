@@ -23,7 +23,6 @@ import argparse, glob, json, math, os, re, time
 import numpy as np
 import torch
 import torch.nn as nn
-from scipy.signal import hilbert
 
 torch.set_default_dtype(torch.float64)
 
@@ -36,11 +35,11 @@ def st_williamson(Re):
     return -3.3265 / Re + 0.1816 + 1.6e-4 * Re
 
 
-def period_from_signal(t, s, edge_frac=0.1):
-    s = np.asarray(s, float); s = s - s.mean()
-    ph = np.unwrap(np.angle(hilbert(s)))
-    k = max(1, int(edge_frac * len(s)))
-    return float(2 * math.pi / abs(np.polyfit(t[k:-k], ph[k:-k], 1)[0]))
+# Period estimation lives in period.py. The Hilbert phase-regression estimator
+# used previously is biased by harmonic content (1.2e-5 on a wake-like signal
+# whose period is exactly known), which contaminated every cross-method
+# comparison below ~1e-5.
+from period import period_from_signal            # noqa: E402,F401
 
 
 # ------------------------------------------------------------------------ POD
