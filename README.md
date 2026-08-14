@@ -640,6 +640,67 @@ unresolved POD energy and δ (ρ ≈ −0.66 to −0.87). Those are artefacts. F
 δ varies by 0.7% across the sweep, so the correlation is fitted to noise; for
 `ode-mlp` it is driven by two blow-ups at high mode count rather than any trend.
 
+## What the period error costs
+
+A diagnostic is worth reporting only if it predicts something a practitioner
+cares about. The claim is a split. Phase-invariant quantities — time-mean field,
+RMS fluctuation, the covariance that stands in for Reynolds stresses — should not
+care where in the cycle a surrogate thinks it is. Phase-resolved ones —
+forecasting a given instant, data assimilation, phase-locked actuation — should
+decorrelate at N ≈ 1/(4δ).
+
+Rolled out to 30000 shedding periods, with ground truth from phase-wrapping the
+reference trajectory (exact to 6 × 10⁻¹⁴, since period jitter is 5 × 10⁻⁷).
+
+### Phase-resolved error follows 2|sin(πδN)|
+
+A phase slip of Δθ = 2πδN gives relative RMS error 2|sin(Δθ/2)|. It does not
+saturate: it first reaches √2 at N = 1/(4δ) and returns to zero whenever the slip
+passes a multiple of 2π. Observed/predicted over 30000-period rollouts:
+
+| model | median | p10 | p90 |
+|---|---|---|---|
+| ode-mlp | 1.036 | 0.969 | 1.103 |
+| ar-residual | 1.023 | 0.966 | 1.112 |
+| ar-direct | 1.034 | 0.988 | 1.699 |
+| ode-deep | 1.080 | 0.705 | 1.135 |
+
+The recurrence is visible directly: `ode-mlp` reaches 1.960 at 10000 periods and
+falls back to 0.529 at 20000, as the phase slip passes 2π.
+
+Per seed, the first crossing of √2 against the predicted 1/(4δ) gives a median
+ratio of **1.52** over 14 runs. The sampled horizons are spaced about 3× apart,
+so that is agreement to within one grid step.
+
+### Phase-invariant statistics are flat — if the model has an attractor
+
+Covariance error at 10 periods against 30000 periods, a 3000× increase in
+rollout length:
+
+| model | N = 10 | N = 30000 | growth | |
+|---|---|---|---|---|
+| ode-mlp | 6.2 × 10⁻³ | 6.7 × 10⁻³ | **1.1×** | nonlinear |
+| ode-deep | 6.1 × 10⁻³ | 6.5 × 10⁻³ | **1.1×** | nonlinear |
+| ar-residual | 7.3 × 10⁻³ | 7.8 × 10⁻³ | **1.1×** | nonlinear |
+| ar-direct | 3.9 × 10⁻² | 4.0 × 10⁻² | **1.0×** | nonlinear |
+| linear-sgd | 4.2 × 10⁻² | 9.9 × 10⁻¹ | 23.7× | linear |
+| exact DMD | 3.5 × 10⁻² | 3.8 × 10⁹ | **1.1 × 10¹¹×** | linear |
+| gru | 1.9 × 10⁻¹ | 1.1 × 10¹⁰ | 5.8 × 10¹⁰× | no cycle |
+
+Four models with a genuine attracting cycle hold their statistics to within 10%
+over three orders of magnitude in horizon. The exceptions are not exceptions to
+the argument — they are the same mechanism. A linear surrogate has no attractor,
+so its amplitude is set entirely by |λ|, and exact DMD's |λ| = 1.00001312
+compounds to e¹² over 9 × 10⁵ steps. Neutrality is what bounds the amplitude;
+without it even the phase-invariant statistics go.
+
+### The statement a practitioner can use
+
+Time-averaged statistics from a surrogate with an attracting limit cycle are
+trustworthy indefinitely. Anything phase-resolved has a shelf life of 1/(4δ)
+cycles, and δ is measurable from a ten-period rollout. A linear surrogate gets
+neither guarantee unless |λ| = 1 is imposed.
+
 ## Limitations
 
 Stuart–Landau is a two-dimensional toy with an analytically known cycle. None of
