@@ -701,6 +701,63 @@ trustworthy indefinitely. Anything phase-resolved has a shelf life of 1/(4δ)
 cycles, and δ is measurable from a ten-period rollout. A linear surrogate gets
 neither guarantee unless |λ| = 1 is imposed.
 
+## Where the single-scalar argument stops holding
+
+Everything above assumes a limit cycle: one neutral direction, one period, one
+scalar δ. A quasi-periodic attractor has two incommensurate frequencies and no
+single period, so the diagnostic cannot apply as stated. Two Stuart–Landau
+oscillators with diffusive coupling carry the system across the locking
+transition, with the regime measured by the rate at which the two oscillators'
+phases separate:
+
+| eps | 0.0 | 0.1 | 0.2 | 0.3 | 0.4 | 0.5 | 0.8 |
+|---|---|---|---|---|---|---|---|
+| phase drift | 0.77 | 0.75 | 0.66 | 0.49 | **0.00** | **0.00** | **0.00** |
+
+The on-cycle frequencies are set to the golden ratio; note that Ω = ω − βμ rather
+than ω, so setting ω₂/ω₁ = golden instead places the system at Ω₂/Ω₁ = 1.4944,
+essentially 3:2 — on a low-order resonance, the opposite of what was intended.
+
+### The boundary is sharp, and it is a well-posedness boundary
+
+The single-period fit always latches onto the stronger frequency as its
+"fundamental". What changes across the transition is whether that fit means
+anything. Fitting the two halves of one record separately:
+
+| eps | regime | half-vs-half instability | δ from the fit | δ measured properly |
+|---|---|---|---|---|
+| 0.00 | quasi-periodic | **3.8 × 10⁻¹** | 6.08 × 10⁻¹ | 1.9 × 10⁻³, 1.8 × 10⁻³ |
+| 0.10 | quasi-periodic | 1.3 × 10⁻⁴ | 6.11 × 10⁻¹ | 5.4 × 10⁻³, 4.6 × 10⁻³ |
+| 0.20 | quasi-periodic | 3.3 × 10⁻⁵ | 8.62 × 10⁻³ | 3.5 × 10⁻², 3.1 × 10⁻³ |
+| 0.30 | quasi-periodic | 1.5 × 10⁻⁵ | 1.16 × 10⁻⁴ | 1.0 × 10⁻⁴, 1.2 × 10⁻⁴ |
+| 0.50 | **LOCKED** | **1.8 × 10⁻⁹** | 2.84 × 10⁻⁴ | = the same number |
+| 0.80 | **LOCKED** | **9.6 × 10⁻⁹** | 8.80 × 10⁻⁴ | = the same number |
+
+Six orders of magnitude separate the well-posedness of the single-period fit in
+the two regimes. At eps = 0 it disagrees with itself by 38% on one record, and
+its reported δ of 0.61 is not a measurement of anything — both true frequencies
+are in fact learned to 2 × 10⁻³. Once locked, the fit is stable to 10⁻⁹ and its δ
+agrees exactly with the direct measurement, so the rest of the paper applies
+unchanged.
+
+The practical form: **check that a period fit is stable before trusting a δ.**
+Splitting the record in half and refitting costs nothing and separates the two
+regimes by six orders of magnitude.
+
+### What did not work
+
+The obvious generalisation — replace one scalar with two, giving
+err = √(Σₖ wₖ · 4 sin²(π δₖ Nₖ)) — does **not** hold up. Observed/predicted
+ratios for the two-frequency law are 1.04 at eps = 0 but 3.19, 0.81 and 0.68 at
+eps = 0.1, 0.2, 0.3, and in the locked regime it is worse than the
+single-frequency law (5.34 against 1.39 at eps = 0.8). One case agreeing is not
+a law. The extension is not established and is not claimed.
+
+Two further things this section does not settle. Weight imbalance does not
+explain which quasi-periodic cases the single-period fit survives — the two
+families carry 0.44–0.56 of the energy at every coupling tested, so that
+hypothesis is dead. And chaotic attractors are out of scope entirely.
+
 ## Limitations
 
 Stuart–Landau is a two-dimensional toy with an analytically known cycle. None of
