@@ -51,6 +51,14 @@ where our own remedy fails: anchoring the phase does not anchor the decoded
 observable, and outside the training range the anchored model is worse than
 doing nothing.
 
+We also locate where the argument itself stops. On a quasi-periodic attractor
+the single-period fit becomes ill-posed — it disagrees with itself by 38% on one
+record, against 10⁻⁹ once the oscillators lock — so a δ quoted there measures
+nothing. Splitting a record and refitting separates the two regimes by nine
+orders of magnitude and is worth doing before any δ is trusted. The natural
+two-frequency generalisation of the error law does not hold, and we do not claim
+it.
+
 ## 1. Introduction
 
 Rollout error curves in the neural-PDE literature look alike. Error grows, then
@@ -344,7 +352,52 @@ the decoded signal then carries a spurious component however exact the phase is.
 gives up the reproducibility it has at one operating point: seed spread is
 29–171× here against 2–12× for the free baseline.
 
-## 9. Discussion
+## 9. Where the argument stops
+
+The whole analysis assumes a limit cycle: one neutral direction, one period, one
+scalar. A quasi-periodic attractor has two incommensurate frequencies and no
+single period, so the diagnostic cannot apply as stated. Rather than assert the
+boundary we locate it, using two Stuart–Landau oscillators with diffusive
+coupling swept across the locking transition. The regime is read off the rate at
+which the two oscillators' phases separate:
+
+| eps | 0.0 | 0.1 | 0.2 | 0.3 | 0.4 | 0.5 | 0.8 |
+|---|---|---|---|---|---|---|---|
+| phase drift | 0.77 | 0.75 | 0.66 | 0.49 | **0.00** | **0.00** | **0.00** |
+
+**The boundary is one of well-posedness.** The single-period fit always latches
+onto the stronger frequency as its fundamental; what changes across the
+transition is whether the result means anything. Fitting the two halves of one
+record separately:
+
+| eps | regime | half-vs-half instability | δ from the fit | δ measured properly |
+|---|---|---|---|---|
+| 0.00 | quasi-periodic | **3.8 × 10⁻¹** | 6.08 × 10⁻¹ | 1.9 × 10⁻³, 1.8 × 10⁻³ |
+| 0.10 | quasi-periodic | 1.3 × 10⁻⁴ | 6.11 × 10⁻¹ | 5.4 × 10⁻³, 4.6 × 10⁻³ |
+| 0.30 | quasi-periodic | 1.5 × 10⁻⁵ | 1.16 × 10⁻⁴ | 1.0 × 10⁻⁴, 1.2 × 10⁻⁴ |
+| 0.50 | locked | **1.8 × 10⁻⁹** | 2.84 × 10⁻⁴ | the same number |
+| 0.80 | locked | **9.6 × 10⁻⁹** | 8.80 × 10⁻⁴ | the same number |
+
+Six orders of magnitude separate the two regimes. At eps = 0 the fit disagrees
+with itself by 38% on a single record, and its reported δ of 0.61 is not a
+measurement of anything — both true frequencies are in fact learned to
+2 × 10⁻³. Once locked the fit is stable to 10⁻⁹ and its δ agrees exactly with a
+direct measurement, so §§2–8 apply unchanged.
+
+This yields a check worth running before any δ is quoted: **split the record,
+refit, compare.** It costs nothing and separates the two regimes by nine orders
+of magnitude.
+
+**The obvious generalisation does not work.** Replacing one scalar with two,
+err = √(Σₖ wₖ · 4 sin²(π δₖ Nₖ)), gives observed/predicted 1.04 at eps = 0 but
+3.19, 0.81 and 0.68 at eps = 0.1, 0.2 and 0.3, and is worse than the
+single-frequency law in the locked regime (5.34 against 1.39 at eps = 0.8). One
+agreeing case is not a law, and we do not claim the extension. A weight-imbalance
+account of which quasi-periodic cases survive is also refuted: the two frequency
+families carry 0.44–0.56 of the energy at every coupling tested. Chaotic
+attractors are out of scope.
+
+## 10. Discussion
 
 Long-horizon fidelity of a surrogate of a limit cycle is controlled by two
 spectral properties of its phase direction: neutrality, and frequency. Standard
@@ -366,8 +419,10 @@ time-averaged statistics indefinitely and loses only phase; a surrogate that
 lacks it loses both. This is why the linear models in §7 fail at statistics that
 the nonlinear ones hold flat, despite the linear models having smaller δ.
 
-The practical recommendations are short. Report δ; it is measurable from ten
-periods and predicts decorrelation at 1/(4δ). Do not read long-horizon fidelity
+The practical recommendations are short. Check that the period fit is
+well-posed — split the record, refit, compare — since on a quasi-periodic
+attractor a δ can be reported that means nothing. Then report δ; it is measurable
+from ten periods and predicts decorrelation at 1/(4δ). Do not read long-horizon fidelity
 off a validation error. Report more than one seed for a learned surrogate, since
 δ spreads by up to 5 × 10⁴× at fixed architecture and data. Match the surrogate
 to the question: for time-averaged statistics almost anything with an attractor
@@ -375,7 +430,7 @@ will do, and for phase-resolved work the horizon is fixed in advance by δ. If
 the frequency can be measured, impose it, and impose neutrality with it —
 expecting the benefit in-distribution only.
 
-## 10. Limitations
+## 11. Limitations
 
 Every system here is two-dimensional and periodic. Quasi-periodic and chaotic
 attractors have no single period and the argument does not transfer to them
@@ -427,10 +482,11 @@ estimator's worst bias, so they are not affected; they have not been re-run.
 
 ## Still open
 
-- Quasi-periodic boundary case (§10) — not run. The single-period argument
-  cannot hold for two incommensurate frequencies and the boundary is undrawn.
 - Flexible FSI, where the structure sets its own timescale rather than
   inheriting one — not run, and the strongest remaining system class.
+- A theory for the quasi-periodic side of the boundary. §9 shows where the
+  single-scalar description fails and gives a test for it, but the obvious
+  two-frequency replacement was tried and does not hold.
 - The §6 parametric-wake numbers predate the estimator correction. They sit one
   to three orders above the old estimator's worst bias so they are unaffected,
   but they have not been re-run.
