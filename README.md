@@ -511,8 +511,8 @@ numbers:
 | *frequency interpolant's own error* | *4.53 × 10⁻⁴ (552 P)* | *3.69 × 10⁻⁴ (678 P)* | — |
 
 Read the last two rows together. Imposing neutrality and frequency reproduces the
-frequency interpolant's error to four significant figures, 4.525 × 10⁻⁴ against a
-predicted 4.526 × 10⁻⁴. The same closed-form predictability the anchored neural
+frequency interpolant's error to within 0.03%, 4.503 × 10⁻⁴ against a predicted
+4.504 × 10⁻⁴. The same closed-form predictability the anchored neural
 model has, now for a classical linear ROM.
 
 Neither property suffices alone. Neutrality without the frequency stabilises
@@ -545,12 +545,15 @@ seeds. This is the controlled single-point comparison.
 | model | params | med MSE | med \|δ\| | seed spread | horizon |
 |---|---|---|---|---|---|
 | DMD (least squares) | 64 | — | 4.58 × 10⁻⁴ | **1.0×** | 546 P |
-| linear-sgd | 64 | 2.81 × 10⁻⁴ | 7.57 × 10⁻⁵ | 22× | 3303 P |
-| ode-mlp | 20264 | 1.89 × 10⁻⁶ | 4.07 × 10⁻⁵ | 47× | 6144 P |
-| ode-deep | 114440 | 6.87 × 10⁻⁶ | 1.86 × 10⁻⁵ | 3.8 × 10⁷× | 13431 P |
-| ar-residual | 20264 | 6.43 × 10⁻⁵ | 1.42 × 10⁻⁴ | 3.5× | 1758 P |
-| ar-direct | 20264 | 3.32 × 10⁻⁴ | 9.71 × 10⁻⁵ | 82× | 2574 P |
-| **gru** | 31304 | 4.88 × 10⁻⁵ | **4.07 × 10¹** | 5.3 × 10⁴× | **0 P** |
+| linear-sgd | 64 | 2.81 × 10⁻⁴ | 7.56 × 10⁻⁵ | 22× | 3306 P |
+| ode-mlp | 20264 | 1.94 × 10⁻⁶ | 4.19 × 10⁻⁵ | 38× | 5972 P |
+| ode-deep | 114440 | 3.77 × 10⁻⁶ | 1.12 × 10⁻⁵ | 2.2 × 10⁴× | 22225 P |
+| ar-residual | 20264 | 6.43 × 10⁻⁵ | 1.42 × 10⁻⁴ | 3.5× | 1760 P |
+| ar-direct | 20264 | 3.32 × 10⁻⁴ | 9.67 × 10⁻⁵ | 71× | 2584 P |
+| **gru** | 31304 | 4.88 × 10⁻⁵ | **4.49 × 10¹** | 6.0 × 10⁴× | **0 P** |
+
+Re-measured with the corrected period estimator (`results/arch_v2`). The numbers
+below quote this table.
 
 Every learned architecture has the pathology and the magnitude spans six orders
 of magnitude. Across all 30 runs, training loss and δ are uncorrelated
@@ -560,7 +563,7 @@ of magnitude. Across all 30 runs, training loss and δ are uncorrelated
 
 `linear-sgd` is exactly DMD's hypothesis class — one matrix — fitted by Adam on a
 25-step rollout instead of by least squares on one step. It is **6× better**
-(7.57 × 10⁻⁵ against 4.58 × 10⁻⁴). The prediction going in was the opposite: that
+(7.56 × 10⁻⁵ against 4.58 × 10⁻⁴). The prediction going in was the opposite: that
 gradient descent would lose to the closed-form solution and show the optimiser
 was at fault.
 
@@ -571,7 +574,7 @@ same data, same number of parameters, 6× the horizon.
 ### A recurrent model can fit well and have no cycle at all
 
 The GRU reaches training MSE 4.88 × 10⁻⁵, better than both linear-sgd and
-ar-direct, which work. Its δ is 40.7 — the period is wrong by a factor of forty,
+ar-direct, which work. Its δ is 44.9 — the period is wrong by a factor of forty,
 and the usable horizon is zero. A recurrent hidden state carries dynamics of its
 own and drifts over a long rollout, and nothing in the training objective sees
 it. This is the sharpest instance of the decoupling in the whole study.
@@ -579,8 +582,77 @@ it. This is the sharpest instance of the decoupling in the whole study.
 ### Deterministic fits are reproducible; learned ones are not
 
 DMD's seed spread is exactly 1.0×, being a closed-form fit with no seed
-dependence. Every learned model spreads between 3.5× and 3.8 × 10⁷×. Reporting a
+dependence. Every learned model spreads between 3.5× and 6.0 × 10⁴×. Reporting a
 single seed for a learned surrogate says almost nothing about its δ.
+
+
+## Neural operators
+
+Every model above acts on POD coefficients. Neural operators do not, and they
+are what operator learning is built on, so the claim has to be tested on one
+rather than beside it. These train on the wake **fields**,
+u(x, y, t) → u(x, y, t + Δt) on the full 2 × 192 × 96 grid, and δ is measured by
+rolling out 3215 steps (100 periods), projecting onto the same 8-mode POD basis
+and fitting coefficient 1 with the same estimator. Only the model changes.
+
+Training uses a 25-step rollout loss, matching the latent models. A one-step FNO
+would confound architecture with objective, and the objective is exactly what
+the section above shows matters more than the model class.
+
+| config | stable | med MSE | med \|δ\| | seed spread | horizon |
+|---|---|---|---|---|---|
+| FNO, 8-step objective | 0/1 | 2.88 × 10⁻⁶ | diverged | — | **0 P** |
+| FNO, 25-step | 4/5 | 6.56 × 10⁻⁶ | 4.48 × 10⁻⁴ | 141× | 558 P |
+| FNO, 25-step, direct | 5/5 | 1.58 × 10⁻⁵ | 8.61 × 10⁻⁶ | 10× | 29032 P |
+| FNO, 25-step + noise | 5/5 | 1.92 × 10⁻⁵ | 4.90 × 10⁻⁴ | 890× | 510 P |
+| DeepONet, 25-step | 3/3 | 3.57 × 10⁻⁴ | 1.24 × 10⁻² | 5× | 20 P |
+| DeepONet, direct | 3/3 | 1.18 × 10⁻² | 3.76 × 10⁻¹ | 15× | 1 P |
+| DeepONet, 25-step + noise | 3/3 | 3.87 × 10⁻⁴ | 1.40 × 10⁻² | 37080× | 18 P |
+
+Four things. The 8-step objective produces the **lowest training loss of any FNO
+here** and is the only one that cannot finish a rollout, diverging at step 645 of
+3215. Rollout survival is also seed-dependent and invisible to the loss: one
+25-step seed diverges at step 2010 having trained to 6.56 × 10⁻⁶, against
+5.99 × 10⁻⁶ for the best seed that survives.
+
+The direct parameterisation is the strongest learned model in this repository on
+both counts that matter — median δ = 8.6 × 10⁻⁶ and a seed spread of 10×, against
+3.5× to 6 × 10⁴× for everything else — while fitting twice as poorly as the
+residual form.
+
+Noise injection is the informative case because its effect is confined. It
+rescues the diverging seed, 5 of 5 rollouts completing rather than 4 of 5, and
+leaves the median period error where it was: 4.90 × 10⁻⁴ against 4.48 × 10⁻⁴, a
+ratio of 1.09. A stability method restored stability and did not touch the
+phase. It widens the seed spread from 141× to 890× doing so.
+
+The DeepONet direct variant's deficit is **structural, not undertraining**, and
+the check is worth recording because the two explanations are indistinguishable
+from the loss alone:
+
+| config | epochs | train MSE | δ |
+|---|---|---|---|
+| control | 3000 | 1.181 × 10⁻² | −8.4 × 10⁻¹ |
+| lr 3 × 10⁻³ | 3000 | 1.185 × 10⁻² | +2.2 |
+| 9000 epochs | 9000 | 1.180 × 10⁻² | diverged |
+| **learnable mean field** | 3000 | **5.744 × 10⁻³** | −1.6 × 10⁻² |
+
+Tripling the epochs and tripling the step size both leave the loss at
+1.18 × 10⁻² to three figures, so it is converged and optimisation is not the
+cause. Giving the model a learnable mean field instead of a per-channel scalar
+halves the loss and improves δ by 52×: the direct form had been spending its
+trunk basis representing a mean flow that never varies. The residual form is
+still 16× better, so that is part of the gap and not all of it.
+
+The two operator families split in opposite directions on this choice — direct
+is the FNO's best configuration and the DeepONet's worst. That is a real
+architectural difference and it is not explained here.
+
+(An earlier version of this model trained 4700× worse than the FNO for a
+different reason: its trunk used raw coordinates, whose low-frequency spectral
+bias cannot represent a wake mode at all. Fitting one shedding-like field
+directly reaches MSE 2.2 × 10⁻¹ against a target variance of 0.251; with an
+axis-aligned Fourier embedding the same MLP reaches 2.9 × 10⁻⁵.)
 
 ## Truncation, and a second blind spot
 
@@ -593,17 +665,21 @@ seeds, usable horizon in periods:
 | architecture | 4 | 8 | 12 | 16 | 24 | 32 |
 |---|---|---|---|---|---|---|
 | DMD (least squares) | 544 | 546 | 545 | 544 | 542 | 542 |
-| linear-sgd | 6980 | 5507 | 6391 | 3101 | 3701 | 3340 |
-| ode-mlp | 8343 | 5481 | 8571 | 5188 | **20** | **0** |
-| ode-deep | 38993 | 17709 | 9444 | 3611 | 7234 | 225594 |
-| ar-residual | 13091 | 3521 | 1026 | 5466 | 1611 | **0** |
-| ar-direct | 57678 | 831 | 750 | 729 | 1597 | 1663 |
-| gru | 0 | 0 | 6 | 24 | 23 | 0 |
+| linear-sgd | 6988 | 5509 | 6359 | 3098 | 3692 | 3332 |
+| ode-mlp | 8385 | 5432 | 8516 | 5039 | **35** | **0** |
+| ode-deep | 46076 | 37219 | 14755 | **0** | 1129 | 7089 |
+| ar-residual | 13154 | 3528 | 1029 | 5463 | 1613 | **0** |
+| ar-direct | 59506 | 830 | 749 | 737 | 1608 | 1692 |
+| gru | 0 | 0 | 18 | 24 | 24 | 0 |
+
+Re-measured with the corrected estimator (`results/modesweep_v2`).
 
 DMD is flat to within 0.7% across an eightfold change in dimension. What the
 sweep does show is that **more modes actively harm nonlinear learned models**:
-`ode-mlp` holds ~5000 periods up to 16 modes and collapses to 20 and then 0 at
-24 and 32; `ar-residual` collapses at 32. The added directions carry almost no
+`ode-mlp` holds ~5000 periods up to 16 modes and collapses to 35 and then 0 at
+24 and 32; `ar-residual` collapses at 32; `ode-deep` loses the cycle entirely at
+16 and recovers at 24 and 32, which is a warning against reading any single
+truncation as characteristic of an architecture. The added directions carry almost no
 energy (modes 17–20 hold 7 × 10⁻⁵ of the total) but are poorly constrained by
 data, and the rollout destabilises. `linear-sgd` is the most robust learned
 model across the sweep, which is a point in favour of simple latent dynamics.
@@ -613,12 +689,12 @@ two ways:
 
 | basis | modes | energy captured | δ | horizon |
 |---|---|---|---|---|
-| Re = 100 only | 8 | 99.979% | +4.60 × 10⁻⁴ | 544 P |
-| Re = 100 only | 16 | 99.99993% | +4.58 × 10⁻⁴ | 546 P |
-| pooled over 6 Re | 8 | 98.315% | −1.20 × 10⁻⁷ | 2092673 P |
-| pooled over 6 Re | 16 | 99.741% | −1.98 × 10⁻⁸ | 12609030 P |
+| Re = 100 only | 8 | 99.979% | +4.597 × 10⁻⁴ | 544 P |
+| Re = 100 only | 16 | 99.99993% | +4.582 × 10⁻⁴ | 546 P |
+| pooled over 6 Re | 8 | 98.315% | −1.278 × 10⁻⁷ | 1955806 P |
+| pooled over 6 Re | 16 | 99.741% | −2.819 × 10⁻⁸ | 8869295 P |
 
-3800× better δ at 8 modes, from a basis that captures **less** energy — 98.3%
+3600× better δ at 8 modes, and 16,000× at 16 modes, from a basis that captures **less** energy — 98.3%
 against 99.98%. The energy-optimal representation is the worse one for the
 period, and by a wide margin.
 
@@ -733,16 +809,35 @@ anything. Fitting the two halves of one record separately:
 | 0.50 | **LOCKED** | **1.8 × 10⁻⁹** | 2.84 × 10⁻⁴ | = the same number |
 | 0.80 | **LOCKED** | **9.6 × 10⁻⁹** | 8.80 × 10⁻⁴ | = the same number |
 
-Six orders of magnitude separate the well-posedness of the single-period fit in
-the two regimes. At eps = 0 it disagrees with itself by 38% on one record, and
+Six to eight orders of magnitude separate the well-posedness of the
+single-period fit in the two regimes at this record length — but see below, the
+size of that gap is a property of the record and not of the attractor. At eps = 0 it disagrees with itself by 38% on one record, and
 its reported δ of 0.61 is not a measurement of anything — both true frequencies
 are in fact learned to 2 × 10⁻³. Once locked, the fit is stable to 10⁻⁹ and its δ
 agrees exactly with the direct measurement, so the rest of the paper applies
 unchanged.
 
 The practical form: **check that a period fit is stable before trusting a δ.**
-Splitting the record in half and refitting costs nothing and separates the two
-regimes by six orders of magnitude.
+Splitting the record in half and refitting costs nothing.
+
+How much it separates them depends on how long the record is, and the original
+measurement used one window. Sweeping the observation window over 200–1600 time
+units (`src/quasi_split.py`, `results/quasi_split/sweep.json`):
+
+| record length | max quasi-periodic | max locked | separation |
+|---|---|---|---|
+| 200 | 3.69 × 10⁻³ | 8.16 × 10⁻⁹ | 5.7 orders |
+| 400 | 3.82 × 10⁻¹ | 9.60 × 10⁻⁹ | 7.6 orders |
+| 800 | 1.37 × 10⁻⁵ | 5.69 × 10⁻¹⁰ | 4.4 orders |
+| 1600 | 1.34 × 10⁻⁵ | 2.82 × 10⁻⁹ | 3.7 orders |
+
+So the ratio is not the thing to quote — it ranges over four orders of magnitude
+depending on a choice the practitioner does not control. **The threshold is
+robust where the ratio is not.** A locked record refits to within 10⁻⁸ at every
+window tested, worst case 9.6 × 10⁻⁹; a quasi-periodic one never does better
+than 10⁻⁶, best case 1.1 × 10⁻⁶. The two populations are 118× apart and never
+overlap, so a cutoff near 10⁻⁷ classifies every case correctly whatever length
+of record is in hand.
 
 ### What did not work
 
@@ -760,24 +855,24 @@ hypothesis is dead. And chaotic attractors are out of scope entirely.
 
 ## Limitations
 
-Stuart–Landau is a two-dimensional toy with an analytically known cycle. None of
-this yet shows the effect dominates in a PDE, that δ is large enough to matter at
-engineering horizons, or that anchoring survives a latent phase learned from flow
-fields rather than handed over directly. The 200-period horizon is too short:
-several configurations never decorrelated within it, so those comparisons are
-censored and reported that way. The p = 0.20 correlation is weak evidence of no
-relationship, not proof of independence.
+Stuart–Landau is a two-dimensional toy with an analytically known cycle, and the
+Re = 100 wake is low-dimensional and near-harmonic: 8 POD modes on one noise-free
+trajectory is the easiest version of the task. The 200-period oscillator horizon
+is too short, so several configurations never decorrelated within it and those
+comparisons are censored and reported that way.
+
+The relationship between training loss and δ needs stating carefully, because
+the obvious summary is wrong in both directions. Within a fixed architecture and
+objective they are unrelated: on the Stuart–Landau scaling runs ρ = −0.22 at
+p = 0.15. Pool across architectures and a positive association appears —
+ρ = +0.62 at p = 0.033 taking each of the twelve wake configurations as one
+observation — which is the ordinary fact that a model class fitting badly also
+tracks the period badly. Neither number shows that loss predicts δ for a given
+model. What does the work is the spread at fixed everything: 3.5× to 6 × 10⁴× in
+δ across seeds of one architecture, on one dataset, with one objective.
 
 The single-point wake shows the diagnostic transferring while the warning does
-not: δ ≈ 2 × 10⁻⁵ is not what limits that surrogate. A Re = 100 wake is
-low-dimensional and near-harmonic, and 8 POD modes on one noise-free trajectory
-is the easiest version of the task.
-
-The parametric results supply the missing failure case, but on an ODE rather than
-a PDE. What has *not* been shown is a parametric **flow** surrogate with large δ —
-one operator across a range of Reynolds number, where the Strouhal curve is known
-independently. That is the experiment that would join the two halves, and it is
-the next one to run.
+not: δ ≈ 2 × 10⁻⁵ is not what limits that surrogate.
 
 Extrapolation is a genuine limitation rather than a detail. Every model degrades
 outside the training range, anchoring included (43 periods against 2879 inside).
@@ -830,4 +925,14 @@ sbatch cluster/cyl_latent_job.sh
 | `src/cylinder_lbm.py` | D2Q9 lattice Boltzmann cylinder wake at Re = 100 |
 | `src/cyl_latent.py` | POD, free / polar-split / phase-anchored latent ODEs |
 | `src/analyze.py`, `src/harvest.py` | aggregation and the prediction tests |
+| `src/param_wake.py`, `src/rom_wake.py` | parametric wake operator; classical DMD / operator-inference baselines |
+| `src/rom_parametric.py` | the two-property repair, one property at a time, with spectra |
+| `src/arch_breadth.py` | the controlled architecture comparison at one operating point |
+| `src/fno.py` | Fourier neural operator on the wake fields |
+| `src/deeponet.py` | DeepONet with a Fourier-embedded trunk |
+| `src/quasiperiodic.py`, `src/quasi_split.py` | coupled oscillators; the split-half well-posedness test |
+| `src/period.py` | Fourier period estimator, validated to 1e-10 |
+| `src/figures.py` | every figure, regenerated from the result files |
+| `src/filament.py`, `src/ibm.py` | inextensible filament; immersed-boundary kernel |
+| `src/iblbm.py`, `src/flapping.py` | IB-LBM coupling and the flapping-filament case |
 | `cluster/` | Slurm array scripts |
