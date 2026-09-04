@@ -187,12 +187,20 @@ def main():
         A_full = repair(A_entry, dt, Tg, omega=om_fit(R), neutral=True,
                         stabilize=True)
 
+        # keep the spectra, not just the delta they produce. The eigenvalue
+        # plane IS the argument of this section -- interpolation throwing the
+        # dominant pair off the unit circle, each repair pulling it back -- and
+        # it cannot be drawn from a table of periods after the fact.
+        spec = {}
         for name, Amat in [("entry", A_entry), ("eig", A_eig),
                            ("stab", A_stab), ("neutral", A_neut),
                            ("neutral+freq", A_full)]:
             Tp = rollout_period(Amat, A[R][0], dt, T_model[R], a.periods)
             out[name] = ((Tp - T_model[R]) / T_model[R]) if Tp else None
-        rows.append(dict(Re=R, split=tag, **out,
+            lam = np.linalg.eigvals(Amat)
+            k = np.argsort(-np.abs(lam))
+            spec[name] = [[float(lam[i].real), float(lam[i].imag)] for i in k]
+        rows.append(dict(Re=R, split=tag, **out, spectrum=spec,
                          omega_fit_delta=(om_fit(R) - 2 * math.pi / T_model[R])
                          / (2 * math.pi / T_model[R])))
         print("{:>5} {:>8} {:>11} {:>11} {:>11} {:>11} {:>13}".format(

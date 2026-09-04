@@ -1,0 +1,74 @@
+[
+ {
+  "basis": "Re=100 only",
+  "modes": 8,
+  "method": "exact DMD",
+  "delta": 0.0004597136639758112
+ },
+ {
+  "basis": "Re=100 only",
+  "modes": 8,
+  "method": "optDMD free",
+  "delta": -4.760924947757481e-09
+ },
+ {
+  "basis": "Re=100 only",
+  "modes": 8,
+  "method": "optDMD harmonic",
+  "delta": -4.558345949110018e-09
+ },
+ {
+  "basis": "Re=100 only",
+  "modes": 16,
+  "method": "exact DMD",
+  "delta": 0.0004582356799613494
+ },
+ {
+  "basis": "Re=100 only",
+  "modes": 16,
+  "method": "optDMD free",
+  "delta": -1.2473274576430332e-06
+ },
+ {
+  "basis": "Re=100 only",
+  "modes": 16,
+  "method": "optDMD harmonic",
+  "delta": -6.544755155666681e-09
+ },
+ {
+  "basis": "pooled over 6 Re",
+  "modes": 8,
+  "method": "exact DMD",
+  "delta": -1.194644413467265e-07
+ },
+ {
+  "basis": "pooled over 6 Re",
+  "modes": 8,
+  "method": "optDMD free",
+  "delta": -4.549484782409475e-09
+ },
+ {
+  "basis": "pooled over 6 Re",
+  "modes": 8,
+  "method": "optDMD harmonic",
+  "delta": -7.3114196628702825e-09
+ },
+ {
+  "basis": "pooled over 6 Re",
+  "modes": 16,
+  "method": "exact DMD",
+  "delta": -1.9827060231299408e-08
+ },
+ {
+  "basis": "pooled over 6 Re",
+  "modes": 16,
+  "method": "optDMD free",
+  "delta": 4.009836535655914e-09
+ },
+ {
+  "basis": "pooled over 6 Re",
+  "modes": 16,
+  "method": "optDMD harmonic",
+  "delta": -1.0832345290915227e-08
+ }
+]

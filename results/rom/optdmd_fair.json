@@ -1,0 +1,86 @@
+[
+ {
+  "basis": "Re=100 only",
+  "modes": 8,
+  "method": "exact DMD",
+  "delta_rollout": 0.00045973770303061267,
+  "delta_analytic": 0.0004597053000631079
+ },
+ {
+  "basis": "Re=100 only",
+  "modes": 8,
+  "method": "optDMD free",
+  "delta_rollout": -1.7217014789342684e-08,
+  "delta_analytic": -1.3120996530457977e-08
+ },
+ {
+  "basis": "Re=100 only",
+  "modes": 8,
+  "method": "optDMD harmonic",
+  "delta_rollout": -1.320099949612558e-08,
+  "delta_analytic": -1.2982395590771032e-08
+ },
+ {
+  "basis": "Re=100 only",
+  "modes": 16,
+  "method": "exact DMD",
+  "delta_rollout": 0.00045824577017509425,
+  "delta_analytic": 0.0004582273160528869
+ },
+ {
+  "basis": "Re=100 only",
+  "modes": 16,
+  "method": "optDMD free",
+  "delta_rollout": -0.3067747551558591,
+  "delta_analytic": -1.294517420816702e-06
+ },
+ {
+  "basis": "Re=100 only",
+  "modes": 16,
+  "method": "optDMD harmonic",
+  "delta_rollout": -1.5098526900565866e-08,
+  "delta_analytic": -1.4897024060264624e-08
+ },
+ {
+  "basis": "pooled over 6 Re",
+  "modes": 8,
+  "method": "exact DMD",
+  "delta_rollout": -1.311517819335329e-07,
+  "delta_analytic": -1.2782470446949782e-07
+ },
+ {
+  "basis": "pooled over 6 Re",
+  "modes": 8,
+  "method": "optDMD free",
+  "delta_rollout": -1.3825975098441502e-08,
+  "delta_analytic": -1.2909529789808632e-08
+ },
+ {
+  "basis": "pooled over 6 Re",
+  "modes": 8,
+  "method": "optDMD harmonic",
+  "delta_rollout": -1.4822114929616867e-08,
+  "delta_analytic": -1.574081687713573e-08
+ },
+ {
+  "basis": "pooled over 6 Re",
+  "modes": 16,
+  "method": "exact DMD",
+  "delta_rollout": -2.7234922086800886e-08,
+  "delta_analytic": -2.8126304765901806e-08
+ },
+ {
+  "basis": "pooled over 6 Re",
+  "modes": 16,
+  "method": "optDMD free",
+  "delta_rollout": 0.15018331163749143,
+  "delta_analytic": -8.024096586762808e-09
+ },
+ {
+  "basis": "pooled over 6 Re",
+  "modes": 16,
+  "method": "optDMD harmonic",
+  "delta_rollout": -1.918842464137955e-08,
+  "delta_analytic": -2.0103663035529294e-08
+ }
+]
