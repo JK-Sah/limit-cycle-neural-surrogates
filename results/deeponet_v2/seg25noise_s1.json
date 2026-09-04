@@ -1,0 +1,44 @@
+{
+ "rows": [
+  {
+   "arch": "deeponet-residual",
+   "seed": 1,
+   "nparam": 1718306,
+   "noise": 0.001,
+   "train_mse": 0.0005669684522539156,
+   "delta": 60.690484527416054,
+   "steps_reached": 3215,
+   "secs": 9507.954116821289
+  }
+ ],
+ "summary": {
+  "Re": 100,
+  "T_snap": 32.1541997318967,
+  "variant": "residual",
+  "med_delta": 60.690484527416054,
+  "n_stable": 1,
+  "n_seeds": 1
+ },
+ "config": {
+  "data": "data/resweep",
+  "Re": 100,
+  "modes_pod": 8,
+  "p": 128,
+  "branch_width": 256,
+  "trunk_width": 256,
+  "n_freq": 16,
+  "trunk_depth": 4,
+  "epochs": 3000,
+  "seg_len": 25,
+  "batch": 8,
+  "lr": 0.001,
+  "periods": 100,
+  "noise": 0.001,
+  "variant": "residual",
+  "seed_list": [
+   1
+  ],
+  "threads": 16,
+  "out": "results/deeponet_v2/seg25noise_s1.json"
+ }
+}
