@@ -1,0 +1,47 @@
+{
+ "rows": [
+  {
+   "arch": "fno-kolm-residual",
+   "seed": 0,
+   "nparam": 2105857,
+   "noise": 0.0,
+   "train_mse": 2.1422251211639817e-06,
+   "delta": -0.05027768032936969,
+   "steps_reached": 4002,
+   "secs": 35818.707528829575
+  }
+ ],
+ "summary": {
+  "nu": 0.0017,
+  "T_snap": 40.022801630615184,
+  "variant": "residual",
+  "noise": 0.0,
+  "med_delta": 0.05027768032936969,
+  "n_stable": 1,
+  "n_seeds": 1,
+  "pod_energy": 0.9999984280339215
+ },
+ "config": {
+  "data": "data/kolm/nu1.7e-3_snaps.npz",
+  "period": 29.376736396871546,
+  "modes_pod": 8,
+  "width": 32,
+  "fmodes": [
+   16,
+   16
+  ],
+  "depth": 4,
+  "epochs": 3000,
+  "seg_len": 25,
+  "batch": 8,
+  "lr": 0.001,
+  "periods": 100,
+  "noise": 0.0,
+  "variant": "residual",
+  "seed_list": [
+   0
+  ],
+  "threads": 16,
+  "out": "results/fno_kolm/residual_s0.json"
+ }
+}

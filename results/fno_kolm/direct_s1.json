@@ -1,0 +1,47 @@
+{
+ "rows": [
+  {
+   "arch": "fno-kolm-direct",
+   "seed": 1,
+   "nparam": 2105857,
+   "noise": 0.0,
+   "train_mse": 3.4661988993159665e-05,
+   "delta": 0.0002398334075701509,
+   "steps_reached": 4002,
+   "secs": 34452.48431754112
+  }
+ ],
+ "summary": {
+  "nu": 0.0017,
+  "T_snap": 40.022801630615184,
+  "variant": "direct",
+  "noise": 0.0,
+  "med_delta": 0.0002398334075701509,
+  "n_stable": 1,
+  "n_seeds": 1,
+  "pod_energy": 0.9999984280339215
+ },
+ "config": {
+  "data": "data/kolm/nu1.7e-3_snaps.npz",
+  "period": 29.376736396871546,
+  "modes_pod": 8,
+  "width": 32,
+  "fmodes": [
+   16,
+   16
+  ],
+  "depth": 4,
+  "epochs": 3000,
+  "seg_len": 25,
+  "batch": 8,
+  "lr": 0.001,
+  "periods": 100,
+  "noise": 0.0,
+  "variant": "direct",
+  "seed_list": [
+   1
+  ],
+  "threads": 16,
+  "out": "results/fno_kolm/direct_s1.json"
+ }
+}
