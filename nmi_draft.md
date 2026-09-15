@@ -4,67 +4,39 @@
 
 ## Abstract
 
-Reduced-order and learned surrogates of oscillatory systems lose accuracy over
-long rollouts. The usual response is a stability mechanism — an energy penalty,
-a Lipschitz constraint, noise injection during training — and we show these act
-on the wrong direction. A stable limit cycle has one Floquet multiplier exactly
-equal to unity along the orbit, forced by time-translation invariance, with the
-rest strictly inside the unit circle. Amplitude error therefore decays on its
-own; phase error has no restoring force and accumulates without bound. Long-horizon
-behaviour is set by one scalar, the relative period error δ, which is
-measurable from a short rollout and predicts decorrelation far beyond it.
+Autoregressive surrogates of oscillatory flows lose long-horizon accuracy
+through accumulated phase drift, not amplitude error [1]. We give the mechanism,
+and show that the methods used to stabilise long rollouts act on a direction that
+was never at fault.
 
-Across 75 trained models on a Stuart–Landau oscillator, observed phase drift
-matches the rate predicted from δ with median ratio 1.0000. δ cannot be read off
-the training loss: at fixed architecture, data and objective it spreads by up to
-6 × 10⁴× across random seeds alone, it is unchanged by 64× more data,
-and left alone or made 27× worse by the three standard stability methods. The
-result is not a property of neural networks: on a cylinder wake, dynamic mode
-decomposition recovers the neutral multiplier to |λ| = 1.00000000 by least
-squares alone, and seven surrogate families — continuous, discrete,
-recurrent, linear, and classical — span six orders of magnitude in δ while
-their training losses do not distinguish them. A recurrent model reaches a
-lower training loss than two that work and has no usable limit cycle at all.
+By time-translation invariance a stable limit cycle has one Floquet multiplier at
+unity along the orbit, the rest inside the unit circle: amplitude error
+self-corrects, phase error has no restoring force. Long-horizon fidelity is set
+by one scalar, the relative period error δ, measurable from a ten-period rollout
+and predicting observed drift to a median ratio of 1.0000.
 
-Two properties control the outcome, and both must be imposed. Enforcing
-neutrality of the phase direction on a parametric reduced-order model makes
-every rollout bounded but leaves a 3-period horizon; adding a measured
-frequency reproduces the frequency interpolant's own error to within 0.03%,
-4.503 × 10⁻⁴ against 4.504 × 10⁻⁴ predicted. Neither alone suffices.
-The same pairing explains the classical results: optimized DMD with harmonic
-locking, which fixes both by construction, reaches δ ≈ 1.3 × 10⁻⁸ and is
-insensitive to basis and truncation, while exact DMD varies by 16,000× with
-basis choice alone.
+Nothing in standard practice sees δ. The three stability methods in common use
+leave it unchanged or worsen it — the worst by 27× — while contracting a
+direction already stable. Nor is the effect neural: least-squares dynamic mode
+decomposition recovers the same neutral multiplier, and the Fourier neural
+operator that fits best is the one that cannot finish a rollout.
 
-The practical consequence appears in parametric operators, which is what
-surrogates are built for. Conditioning a wake operator on Reynolds number drops
-its usable horizon from ~10⁴ shedding periods to 466 at held-out Re and 14
-outside the training range, with training loss unchanged.
-
-The cost is asymmetric, and predictable. Over rollouts of 30,000 shedding
-periods, time-averaged statistics from a surrogate with an attracting cycle stay
-flat to within 10% across a 3000-fold increase in rollout length, while
-phase-resolved quantities follow 2|sin(πδN)| and first decorrelate at
-N = 1/(4δ) — matched per seed to within one sampling interval. Surrogates
-without an attractor forfeit both: exact DMD's |λ| = 1.00001312 compounds over
-9 × 10⁵ steps and its covariance error grows by a factor of 10¹¹. We report
-where our own remedy fails: anchoring the phase does not anchor the decoded
-observable, and outside the training range the anchored model is worse than
-doing nothing.
-
-We also locate where the argument itself stops. On a quasi-periodic attractor
-the single-period fit becomes ill-posed — it disagrees with itself by 38% on one
-record, against 10⁻⁹ once the oscillators lock — so a δ quoted there measures
-nothing. Splitting a record and refitting separates them cleanly at every record
-length we tested, and is worth doing before any δ is trusted. The natural
-two-frequency generalisation of the error law does not hold, and we do not claim
-it.
+Two spectral properties govern the outcome, neither sufficient alone. Impose both
+and δ equals the precision of the frequency estimate, so a usable horizon is
+computable before a model is fitted — one falling from 10⁴ periods to 14 when a
+wake operator is conditioned on Reynolds number.
 
 ## 1. Introduction
 
 Rollout error curves in the neural-PDE literature look alike. Error grows, then
-flattens near a plateau. The plateau is usually read as saturation of a generic
-accumulation process, and the remedies proposed for it are generic too.
+flattens near a plateau. The plateau has usually been read as saturation of a
+generic accumulation process, and the remedies proposed for it are generic too:
+train on longer rollouts, inject noise, penalise the Jacobian. Recent work on
+bluff-body wakes shows the error is not generic at all — almost all of it is
+accumulated phase drift, with the attractor geometry reproduced to a fraction of
+a percent [1]. That reframes the problem without resolving it, because a
+description of the error is not yet an account of what produces it, what sets
+its size, or which interventions can reach it.
 
 For a system on a limit cycle the shape has a specific cause, and it is
 available in closed form. Consider the monodromy matrix of a periodic orbit of
@@ -88,6 +60,57 @@ This makes a prediction sharp enough to be wrong: long-horizon error should be
 fully accounted for by a single scalar measurable from a short rollout, and
 mechanisms acting on the transverse directions should not help. Both hold, and
 the second holds more strongly than we expected.
+
+## 1.1 Relation to existing work
+
+**The phenomenon has been reported.** Samanta and Behera [1] show that for
+bluff-body wakes at Re = 100–800 the autoregressive rollout error of a
+convolutional-autoencoder LSTM is 95–98% pure phase error, peaking at the
+shedding frequency; the network reproduces the attractor geometry to within
+0.15% in amplitude and traverses it at slightly the wrong rate, while one-step
+validation error looks essentially perfect. We take that observation as
+established and do not re-claim it. What their result leaves open is why it
+happens, whether it is specific to learned models, what sets the size of the
+error, and what to do about it. Those are the questions this paper answers.
+
+**Floquet theory has been applied to the same problem, with the opposite
+prescription.** Li and Matzakos [2] bound long-horizon neural-ODE error by
+certifying that the learned return map contracts, using a differentiable loss on
+the monodromy determinant, and note that phase drift between the two clocks
+persists. The bound is correct and the diagnosis is compatible with ours, but
+the remedy is aimed at the wrong direction. A stable limit cycle has one
+multiplier exactly at unity along the orbit; contraction penalties act on the
+transverse multipliers, which were already inside the unit circle. Section 2
+measures what that costs, and the measurement is not neutral: the stronger
+Lipschitz weight leaves the transverse multiplier nearly doubled and the period
+error 27 times worse.
+
+**The rollout-stability literature is large and does not measure period error.**
+Multi-step and pushforward training [3], noise injection, spectral-norm and
+Jacobian regularisation [4, 5], and spectral refinement [6] all target rollout
+divergence, and all are evaluated on rollout error, spectra, or divergence
+rates. We are not aware of a study that reports what any of them does to the
+frequency of a periodic solution. Section 2 does, for three of them, and finds
+that the best of them leaves δ unchanged while the worst degrades it by more
+than an order of magnitude.
+
+**Neutral eigenvalues are foundational in Koopman analysis** [7], where unit
+modulus is the signature of sustained oscillation. The contribution here is not
+that the neutral direction exists but that its accuracy is the binding
+constraint on a surrogate's usable horizon, is measurable in ten periods, and is
+absent from every loss and every basis-selection criterion in standard use.
+
+**Parametric reduced-order models are known to lose stability under
+interpolation,** and stability-preserving interpolation is an established line of
+work [8, 9]. Section 5 sharpens the target: for a limit cycle, generic
+stabilisation is not enough, because clipping eigenvalues without knowing which
+one carries the phase leaves the dominant pair untouched. Neutrality on that
+pair and a measured frequency are both required, and imposing them reproduces
+the frequency interpolant's own error to within 0.03%.
+
+**Neural operators** [10, 11] are evaluated here because the claim is aimed at
+them. Section 3 finds the effect intact on a Fourier neural operator and, in the
+configuration that fits best, most severe.
 
 ## 2. The mechanism
 
@@ -149,7 +172,7 @@ agrees with an independent wake probe to 0.000%, confirming the latent phase is
 the physical one.
 
 Fitting a one-step linear map to those coefficients by least squares — dynamic
-mode decomposition, no network involved — recovers the neutral multiplier:
+mode decomposition [12], no network involved — recovers the neutral multiplier:
 
 | Re | \|λ\| | δ |
 |---|---|---|
@@ -238,6 +261,55 @@ unchanged in that table too. It does have one cost: the seed spread widens from
 141× to 890×, so what the method buys in worst-case survival it gives back in
 reproducibility.
 
+**On a Navier–Stokes field, not a latent space.** Everything above acts on a
+cylinder wake compressed to eight POD coefficients, which leaves open whether
+the period error is a property of the problem or of low-dimensional latent
+dynamics. We close that by measuring δ on the two-dimensional Navier–Stokes
+equations directly, in the forcing geometry of the FNO benchmark itself [10],
+with the operator acting on the full 128 × 128 vorticity field.
+
+Locating a usable case is part of the result. The benchmark ships at ν = 10⁻³,
+10⁻⁴ and 10⁻⁵, and a split-half refit disagrees with itself by 10⁻³ to 10⁻¹ at
+all three, so a δ quoted on them would measure nothing. Sweeping viscosity
+across and beyond that range leaves the flow steady for ν ≥ 1.9 × 10⁻³ and
+aperiodic for ν ≤ 1.8 × 10⁻³, with a narrow window at ν = 1.7 × 10⁻³ where the
+attractor is a clean limit cycle: split-half 4.8 × 10⁻⁹ over 51 periods,
+enstrophy steady to 8 × 10⁻⁴. **All three benchmark settings sit past that
+transition.** Rollouts below are 4002 steps — 100 periods — projected onto an
+8-mode basis and fitted with the same estimator as everywhere else.
+
+| variant | stable | med train MSE | med \|δ\| | seed spread | horizon |
+|---|---|---|---|---|---|
+| residual | 3/3 | **2.14 × 10⁻⁶** | **1.20 × 10⁻²** | 12× | **21 P** |
+| direct | 3/3 | 3.24 × 10⁻⁵ | 2.40 × 10⁻⁴ | **2×** | **1042 P** |
+| + noise injection | 3/3 | 9.69 × 10⁻⁶ | 1.89 × 10⁻³ | 148× | 132 P |
+
+The residual operator fits **fifteen times better and has a fifty times worse
+period**: a usable horizon of 21 cycles against 1042. On the wake the same
+comparison was 2.4× in loss and 52× in δ, so moving to the field widens the loss
+advantage while the period disadvantage holds. Nothing differs between those two
+rows except whether the network predicts the field or the increment.
+
+The direct parameterisation is again the most reproducible, at 2× seed spread
+against 10× for the same variant on the wake. Two systems of very different
+character agree on it, which makes it a design recommendation rather than an
+idiosyncrasy of one problem.
+
+Noise injection we report as undetermined here. Its median δ is 6.4× better than
+the residual baseline, but its three seeds span 148× — 2.1 × 10⁻⁵, 1.9 × 10⁻³
+and 3.1 × 10⁻³ — while on the wake the same intervention moved the median by
+1.09× with a spread of 890×. Across both systems its effect on δ is not
+resolvable at these seed counts. That is consistent with a method acting
+elsewhere than on the phase, and it is not evidence for it.
+
+One property of this case belongs in the open rather than left for a reader to
+find: eight POD modes capture 100.000% of the energy, so the attractor is
+effectively eight-dimensional even though the state has 16384 components and the
+operator acts on all of them. That is a feature of the object, not a weakness of
+the test. A limit cycle is a low-dimensional attractor by construction, which is
+exactly why the Floquet argument applies to it; a system whose attractor were
+genuinely high-dimensional would lie outside the scope this paper claims.
+
 ## 4. The objective, not the model class
 
 `linear-sgd` is exactly DMD's hypothesis class — one matrix — fitted by Adam on
@@ -245,7 +317,7 @@ a 25-step rollout instead of by least squares on one step. It is 6× better. We
 predicted the opposite, expecting gradient descent to lose to the closed-form
 solution and implicate the optimiser.
 
-Optimized DMD tests the alternative explanation with a third algorithm. It fits
+Optimized DMD [13] tests the alternative explanation with a third algorithm. It fits
 the same exponential model against the entire trajectory by Levenberg–Marquardt
 on the exponents, with linear coefficients projected out. On a single-Re basis
 at 8 modes its free form beats exact DMD by **26,700×**, and the harmonic-locked
@@ -541,7 +613,7 @@ seeded from the periodogram so it cannot be handed the answer. Everything in
 ordering and no conclusion. Separately, our momentum-exchange drag estimate is
 retracted: it gives Cd = 1.05, 0.43, 0.04, −0.20 over D = 16…40, and negative
 drag is impossible. Strouhal number comes from a wake probe, is unaffected, and
-tracks the Williamson correlation with mean offset +0.09% and spread 0.90%.
+tracks the Williamson correlation [14] with mean offset +0.09% and spread 0.90%.
 
 Every table has been re-measured with the replacement, and the pattern across
 them is itself informative. The per-Reynolds DMD table in §3 was the one case
@@ -605,3 +677,69 @@ disturbed anywhere.
   truncation tables, has no optDMD section, and carries a Limitations section
   written before the parametric-wake work existed. It needs a sync pass before
   anyone is pointed at the repo.
+
+## References
+
+*Verification status is marked per entry. **[v]** = title, authors, venue and DOI
+confirmed against an indexed record (September 2026). **[p]** = partially
+verified; the bracketed field still needs checking before submission.*
+
+[1] **[v]** S. Samanta and S. Behera, "Autoregressive rollout error in
+latent-space reduced-order models of bluff-body wakes is accumulated phase
+drift," arXiv:2608.07189 (2026). doi:10.48550/arXiv.2608.07189
+
+[2] **[v]** Z. Li and N. M. Matzakos, "Long-time trajectory approximation via
+SA-NODEs: model predictive and Floquet strategies," arXiv:2608.10738 (2026).
+doi:10.48550/arXiv.2608.10738
+
+[3] **[p]** J. Brandstetter, D. Worrall and M. Welling, "Message passing neural
+PDE solvers," *Int. Conf. Learning Representations* (2022). arXiv:2202.03376.
+*[arXiv number from recall — verify]*
+
+[4] **[v]** M. McCabe, P. Harrington, S. Subramanian and J. Brown, "Towards
+stability of autoregressive neural operators," *Transactions on Machine Learning
+Research* (2023). arXiv:2306.10619; OpenReview RFfUUtKYOG.
+
+[5] **[p]** "JAWS: enhancing long-term rollout of neural operators via
+spatially-adaptive Jacobian regularization," arXiv:2603.05538 (2026).
+doi:10.48550/arXiv.2603.05538 *[author list not yet retrieved]*
+
+[6] **[p]** P. Lippe, B. S. Veeling, P. Perdikaris, R. E. Turner and
+J. Brandstetter, "PDE-Refiner: achieving accurate long rollouts with neural PDE
+solvers," *Advances in Neural Information Processing Systems* 36 (2023).
+*[author initials and volume from recall — verify]*
+
+[7] **[v]** S. L. Brunton, M. Budišić, E. Kaiser and J. N. Kutz, "Modern Koopman
+theory for dynamical systems," *SIAM Review* **64**, 229–340 (2022).
+doi:10.1137/21M1401243
+
+[8] **[v]** D. Amsallem and C. Farhat, "Interpolation method for adapting
+reduced-order models and application to aeroelasticity," *AIAA Journal* **46**,
+1803–1813 (2008). doi:10.2514/1.35374
+
+[9] **[v]** M. Geuss, H. Panzer and B. Lohmann, "STABLE — a stability algorithm
+for parametric model reduction by matrix interpolation," *Mathematical and
+Computer Modelling of Dynamical Systems* **22**, 307–322 (2016).
+doi:10.1080/13873954.2016.1198383
+
+[10] **[p]** Z. Li, N. Kovachki, K. Azizzadenesheli, B. Liu, K. Bhattacharya,
+A. Stuart and A. Anandkumar, "Fourier neural operator for parametric partial
+differential equations," *Int. Conf. Learning Representations* (2021).
+arXiv:2010.08895. *[author list from recall — verify]*
+
+[11] **[v]** L. Lu, P. Jin, G. Pang, Z. Zhang and G. E. Karniadakis, "Learning
+nonlinear operators via DeepONet based on the universal approximation theorem of
+operators," *Nature Machine Intelligence* **3**, 218–229 (2021).
+doi:10.1038/s42256-021-00302-5
+
+[12] **[v]** P. J. Schmid, "Dynamic mode decomposition of numerical and
+experimental data," *Journal of Fluid Mechanics* **656**, 5–28 (2010).
+doi:10.1017/S0022112010001217
+
+[13] **[v]** T. Askham and J. N. Kutz, "Variable projection methods for an
+optimized dynamic mode decomposition," *SIAM Journal on Applied Dynamical
+Systems* **17**, 380–416 (2018). doi:10.1137/M1124176
+
+[14] **[v]** C. H. K. Williamson, "Oblique and parallel modes of vortex shedding
+in the wake of a circular cylinder at low Reynolds numbers," *Journal of Fluid
+Mechanics* **206**, 579–627 (1989). doi:10.1017/S0022112089002429
