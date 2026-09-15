@@ -10,3 +10,7 @@ results/**/trial_*.json
 
 # keep aggregated summaries
 !results/*.json
+
+# raw snapshot data lives on the cluster, not in the repo
+data/
+*.npz

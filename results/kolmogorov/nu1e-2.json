@@ -1,0 +1,14 @@
+[
+ {
+  "T": NaN,
+  "split_half": NaN,
+  "amp": 0.0,
+  "regime": "steady",
+  "periods_in_record": NaN,
+  "nu": 0.01,
+  "N": 128,
+  "dt": 0.002,
+  "enstrophy": 0.008020300316519886,
+  "enstrophy_std": 0.0
+ }
+]
