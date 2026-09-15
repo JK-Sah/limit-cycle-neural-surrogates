@@ -680,9 +680,10 @@ disturbed anywhere.
 
 ## References
 
-*Verification status is marked per entry. **[v]** = title, authors, venue and DOI
-confirmed against an indexed record (September 2026). **[p]** = partially
-verified; the bracketed field still needs checking before submission.*
+*All entries verified against indexed records, September 2026. Two remain worth
+a final check at proof stage: [16], whose page range is from a secondary source,
+and the arXiv preprints [1], [2] and [5], which may acquire journal versions
+before this paper appears.*
 
 [1] **[v]** S. Samanta and S. Behera, "Autoregressive rollout error in
 latent-space reduced-order models of bluff-body wakes is accumulated phase
@@ -692,22 +693,23 @@ drift," arXiv:2608.07189 (2026). doi:10.48550/arXiv.2608.07189
 SA-NODEs: model predictive and Floquet strategies," arXiv:2608.10738 (2026).
 doi:10.48550/arXiv.2608.10738
 
-[3] **[p]** J. Brandstetter, D. Worrall and M. Welling, "Message passing neural
+[3] **[v]** J. Brandstetter, D. Worrall and M. Welling, "Message passing neural
 PDE solvers," *Int. Conf. Learning Representations* (2022). arXiv:2202.03376.
-*[arXiv number from recall — verify]*
+doi:10.48550/arXiv.2202.03376
 
 [4] **[v]** M. McCabe, P. Harrington, S. Subramanian and J. Brown, "Towards
 stability of autoregressive neural operators," *Transactions on Machine Learning
 Research* (2023). arXiv:2306.10619; OpenReview RFfUUtKYOG.
 
-[5] **[p]** "JAWS: enhancing long-term rollout of neural operators via
-spatially-adaptive Jacobian regularization," arXiv:2603.05538 (2026).
-doi:10.48550/arXiv.2603.05538 *[author list not yet retrieved]*
+[5] **[v]** F. Nie and Y. Suzuki, "Jacobian-adaptive weighting for stability:
+enhancing long-term rollout of neural partial differential equation solvers via
+spatially-adaptive regularization," arXiv:2603.05538 (2026).
+doi:10.48550/arXiv.2603.05538
 
-[6] **[p]** P. Lippe, B. S. Veeling, P. Perdikaris, R. E. Turner and
+[6] **[v]** P. Lippe, B. S. Veeling, P. Perdikaris, R. E. Turner and
 J. Brandstetter, "PDE-Refiner: achieving accurate long rollouts with neural PDE
-solvers," *Advances in Neural Information Processing Systems* 36 (2023).
-*[author initials and volume from recall — verify]*
+solvers," *Advances in Neural Information Processing Systems* **36** (2023).
+arXiv:2308.05732
 
 [7] **[v]** S. L. Brunton, M. Budišić, E. Kaiser and J. N. Kutz, "Modern Koopman
 theory for dynamical systems," *SIAM Review* **64**, 229–340 (2022).
@@ -722,10 +724,10 @@ for parametric model reduction by matrix interpolation," *Mathematical and
 Computer Modelling of Dynamical Systems* **22**, 307–322 (2016).
 doi:10.1080/13873954.2016.1198383
 
-[10] **[p]** Z. Li, N. Kovachki, K. Azizzadenesheli, B. Liu, K. Bhattacharya,
-A. Stuart and A. Anandkumar, "Fourier neural operator for parametric partial
+[10] **[v]** Z. Li, N. B. Kovachki, K. Azizzadenesheli, B. Liu, K. Bhattacharya,
+A. M. Stuart and A. Anandkumar, "Fourier neural operator for parametric partial
 differential equations," *Int. Conf. Learning Representations* (2021).
-arXiv:2010.08895. *[author list from recall — verify]*
+arXiv:2010.08895. doi:10.48550/arXiv.2010.08895
 
 [11] **[v]** L. Lu, P. Jin, G. Pang, Z. Zhang and G. E. Karniadakis, "Learning
 nonlinear operators via DeepONet based on the universal approximation theorem of
