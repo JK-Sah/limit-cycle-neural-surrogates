@@ -180,12 +180,14 @@ def fig3(res, outdir):
     fam = {"ode-mlp": ("continuous", C["skyblue"]), "ode-deep": ("continuous", C["skyblue"]),
            "ar-direct": ("discrete", C["green"]), "ar-residual": ("discrete", C["green"]),
            "gru": ("recurrent", C["purple"]), "linear-sgd": ("linear", C["vermillion"]),
-           "fno": ("operator", C["black"]), "deeponet": ("operator", C["black"])}
+           "fno": ("operator", C["black"]), "deeponet": ("operator", C["black"]),
+           "fnoNS": ("operator, PDE field", C["vermillion"])}
 
     rows = [r for r in _load(f"{res}/arch_v2/*.json")
             if r.get("train_mse") and r.get("delta")]
     for pat, tag in ((f"{res}/fno/seg*.json", "fno"),
                      (f"{res}/fno_seeds/*.json", "fno"),
+                     (f"{res}/fno_kolm/*.json", "fnoNS"),
                      (f"{res}/deeponet_v2/*.json", "deeponet")):
         for f in sorted(glob.glob(pat)):
             base = os.path.basename(f).split("_s")[0].replace(".json", "")
@@ -320,6 +322,60 @@ def fig5(res, outdir):
     _save(fig, "fig5_parametric_collapse", outdir)
 
 
+# ------------------------------------------------------------------ figure 6
+def fig6(res, outdir):
+    """Where delta is defined: regime map of the FNO benchmark's own equations.
+
+    The benchmark ships three viscosities and all of them lie past the
+    transition, so a period fit on any of them is ill-posed. The figure is the
+    argument for why a new operating point was needed, and it doubles as a
+    worked example of the split-half test: one horizontal line separates the
+    cases where delta means something from the cases where it does not.
+    """
+    rows = []
+    for sub in ("kolmogorov", "kolm_onset", "kolm_data"):
+        for f in sorted(glob.glob(f"{res}/{sub}/*.json")):
+            rows.extend(json.load(open(f)))
+    if not rows:
+        print("  skipping fig6: no sweep data")
+        return
+    best = {}
+    for r in rows:                      # keep the longest record per viscosity
+        k = round(r["nu"], 12)
+        if k not in best or r.get("periods_in_record", 0) > best[k].get("periods_in_record", 0):
+            best[k] = r
+    rows = sorted(best.values(), key=lambda r: r["nu"])
+
+    fig, ax = plt.subplots(figsize=(4.6, 3.2))
+    THRESH = 1e-7
+    groups = {"steady": (C["skyblue"], "s", "steady"),
+              "periodic": (C["green"], "o", "periodic"),
+              "quasi-periodic or chaotic": (C["vermillion"], "^", "aperiodic")}
+    for key, (col, mk, lab) in groups.items():
+        sub = [r for r in rows if r["regime"] == key
+               and r["split_half"] == r["split_half"]]
+        if not sub:
+            continue
+        ax.scatter([r["nu"] for r in sub], [r["split_half"] for r in sub],
+                   s=34, color=col, marker=mk, edgecolor="white", linewidth=0.6,
+                   zorder=3, label=lab)
+    ax.axhline(THRESH, color=INK, lw=1.0, ls=(0, (4, 3)), zorder=2)
+    ax.annotate("well-posed period fit below this line", (1.5e-3, THRESH * 1.6),
+                fontsize=6, color=INK, ha="left")
+    for nu in (1e-3, 1e-4):
+        ax.axvline(nu, color="#e3e3e3", lw=6, zorder=0)
+    ax.annotate("FNO benchmark settings\n(a third, ν = 10⁻⁵, lies further left)",
+                (8.5e-4, 5e0), fontsize=6, color=MUTED, ha="right", va="top")
+    ax.annotate("steady: no oscillation to fit", (7e-3, 5e-3), fontsize=6,
+                color=MUTED, ha="center")
+    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xlabel("viscosity  ν")
+    ax.set_ylabel("split-half instability of the period fit")
+    ax.set_title("δ is undefined at every setting the benchmark ships", fontsize=8)
+    ax.legend(loc="lower right", fontsize=6.5)
+    _save(fig, "fig6_regime_map", outdir)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default="results")
@@ -329,7 +385,7 @@ def main():
     w = _validate_palette()
     print(f"palette worst-case CVD dE = {w:.1f} (target >= 8)")
     assert w >= 8, "palette fails CVD separation"
-    for i, fn in enumerate((fig1, fig2, fig3, fig4, fig5), start=1):
+    for i, fn in enumerate((fig1, fig2, fig3, fig4, fig5, fig6), start=1):
         if a.only and i not in a.only:
             continue
         print(f"figure {i}: {fn.__doc__.splitlines()[0]}")
