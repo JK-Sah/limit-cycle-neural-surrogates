@@ -10,7 +10,7 @@ Learned surrogates of oscillatory systems lose accuracy over long rollouts, and 
 
 Three results seem to me worth an editor's attention.
 
-The training loss carries no information about δ. Across 75 models on a Stuart–Landau oscillator and twelve surrogate configurations on a cylinder wake, δ spans six orders of magnitude while training losses do not distinguish the models, and at fixed architecture, data and objective δ varies by up to 6 × 10⁴× across random seeds alone. Sixty-four times more data does not move it.
+The training loss carries no information about δ at the level a practitioner selects on. Across 75 models on a Stuart–Landau oscillator and twelve surrogate configurations on a cylinder wake, δ spans six orders of magnitude; loss orders the model classes weakly (ρ = +0.62, p = 0.033, taking each configuration as one observation) and orders individual models not at all, since at fixed architecture, data and objective δ varies by up to 6 × 10⁴× across random seeds alone. Sixty-four times more data does not move it.
 
 This is not a pathology of neural networks. Plain least-squares dynamic mode decomposition recovers the same neutral multiplier to eight decimals, and the effect appears in classical reduced-order models, autoregressive networks, recurrent networks and Fourier neural operators alike. The FNO results matter for your readership specifically: the configuration reaching the *lowest* training loss is the only one that cannot complete a rollout, and adding noise injection restores rollout stability while leaving the period error untouched at a ratio of 1.09 — a stability method fixing stability and doing nothing for phase, which is the paper's argument in one experiment.
 

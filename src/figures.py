@@ -139,7 +139,7 @@ def fig2(res, outdir):
     for ax, key, ttl, ylab in (
             (axes[0], "err_inst", "Phase-resolved error follows $2|\\sin(\\pi\\delta N)|$",
              "relative RMS error at instant"),
-            (axes[1], "err_cov", "Phase-invariant statistics stay flat -- with an attractor",
+            (axes[1], "err_cov", "Phase-invariant statistics stay flat when\nthe model has an attractor",
              "covariance error")):
         for a, col, mk in zip(archs, colors, MARKERS):
             sub = sorted([r for r in rows if r["arch"] == a], key=lambda r: r["N"])
@@ -151,13 +151,29 @@ def fig2(res, outdir):
             med = np.array([np.median(v[N == n]) for n in Nu])
             ax.plot(Nu, med, marker=mk, ms=3.5, color=col, label=a,
                     markeredgecolor="white", markeredgewidth=0.4)
+            # The left panel asserts a law, so the law is drawn rather than
+            # left for the reader to take on trust. Faint, and behind the data.
+            if key == "err_inst" and all("err_inst_pred" in r for r in sub):
+                pv = np.array([r["err_inst_pred"] for r in sub], float)
+                pmed = np.array([np.median(pv[N == n]) for n in Nu])
+                ax.plot(Nu, pmed, color=col, lw=0.9, ls=(0, (2, 2)),
+                        alpha=0.55, zorder=1)
         ax.set_xscale("log"); ax.set_yscale("log")
         ax.set_xlabel("rollout length  N  (shedding periods)")
         ax.set_ylabel(ylab); ax.set_title(ttl, fontsize=7.5)
     axes[0].axhline(np.sqrt(2), color=MUTED, lw=1.0, ls=(0, (4, 3)))
-    axes[0].annotate(r"$\sqrt{2}$ = decorrelated", (1.2, np.sqrt(2) * 1.15),
-                     color=MUTED, fontsize=6)
+    # Axes-fraction coordinates: the previous data-coordinate placement put this
+    # label off the left edge of a log axis starting at N = 10, so it never drew.
+    axes[0].annotate(r"$\sqrt{2}$ = decorrelated", (0.02, np.sqrt(2)),
+                     xycoords=("axes fraction", "data"),
+                     va="bottom", color=MUTED, fontsize=6)
+    axes[0].plot([], [], color=MUTED, lw=0.9, ls=(0, (2, 2)),
+                 label=r"$2|\sin(\pi\delta N)|$")
+    axes[0].legend(loc="upper left", ncol=1, fontsize=6)
     axes[1].legend(loc="upper left", ncol=1)
+    for ax, lab in zip(axes, "ab"):
+        ax.annotate(lab, (-0.18, 1.04), xycoords="axes fraction",
+                    fontsize=9, fontweight="bold", color=INK)
     _save(fig, "fig2_what_it_costs", outdir)
 
 
@@ -181,7 +197,9 @@ def fig3(res, outdir):
            "ar-direct": ("discrete", C["green"]), "ar-residual": ("discrete", C["green"]),
            "gru": ("recurrent", C["purple"]), "linear-sgd": ("linear", C["vermillion"]),
            "fno": ("operator", C["black"]), "deeponet": ("operator", C["black"]),
-           "fnoNS": ("operator, PDE field", C["vermillion"])}
+           # Same hue as the other operators on purpose: the palette is capped
+           # at five separable hues, so marker shape carries the finer split.
+           "fnoNS": ("operator", C["black"])}
 
     rows = [r for r in _load(f"{res}/arch_v2/*.json")
             if r.get("train_mse") and r.get("delta")]
@@ -214,7 +232,7 @@ def fig3(res, outdir):
         ax.plot([mx, mx], [min(y), max(y)], color=col, lw=1.0, alpha=0.55, zorder=3)
         ax.scatter([mx], [my], s=42, color=col, marker=mk, edgecolor="white",
                    linewidth=0.7, zorder=4)
-        pts.append((mx, my))
+        pts.append((mx, my, not k.startswith("fnoNS")))
 
     # Legend by family, not by configuration. Colour already carries family and
     # twelve entries would cover the data; the markers separate configurations
@@ -229,8 +247,14 @@ def fig3(res, outdir):
                       markersize=5, markeredgecolor="white")
                for l, c in sorted(fams.items())]
 
-    rho_c, p_c = spearmanr(np.log10([a for a, _ in pts]),
-                           np.log10([b for _, b in pts]))
+    # Two populations, both reported. The wake configurations are what the
+    # text quotes; adding the Navier-Stokes operators weakens the trend, and
+    # hiding either number would put the figure at odds with the manuscript.
+    rho_c, p_c = spearmanr(np.log10([a for a, _, _ in pts]),
+                           np.log10([b for _, b, _ in pts]))
+    wake = [(a, b) for a, b, w in pts if w]
+    rho_w, p_w = spearmanr(np.log10([a for a, _ in wake]),
+                           np.log10([b for _, b in wake]))
     spreads = [max(b for _, b in v) / min(b for _, b in v)
                for v in grp.values() if min(b for _, b in v) > 0]
 
@@ -240,14 +264,22 @@ def fig3(res, outdir):
     ax.set_title("Loss orders model classes weakly, and models not at all",
                  fontsize=8)
     ax.annotate(
-        f"across configurations: $\\rho$ = {rho_c:+.2f} (p = {p_c:.3f}, n = {len(pts)})\n"
+        f"across wake configurations: $\\rho$ = {rho_w:+.2f} "
+        f"(p = {p_w:.3f}, n = {len(wake)})\n"
+        f"adding the Navier-Stokes operators: $\\rho$ = {rho_c:+.2f} "
+        f"(p = {p_c:.3f}, n = {len(pts)})\n"
         f"within one configuration: {min(spreads):.1f}× to "
         f"{max(spreads)/10**int(np.log10(max(spreads))):.0f} × 10"
         f"{chr(0x2070+int(np.log10(max(spreads))))}× in $\\delta$",
-        (0.03, 0.03), xycoords="axes fraction", fontsize=6.2, color=MUTED,
-        linespacing=1.5)
+        # Below the axes rather than inside them: the scatter fills the frame
+        # and every in-frame placement tried sat on top of a configuration
+        # median. A white box behind the text would have hidden the point.
+        (0.0, -0.20), xycoords="axes fraction", fontsize=6.2, color=MUTED,
+        linespacing=1.5, va="top")
     ax.legend(handles=handles, loc="upper left", ncol=3, fontsize=6,
-              handletextpad=0.3, columnspacing=1.0)
+              handletextpad=0.3, columnspacing=1.0,
+              frameon=True, framealpha=0.78, facecolor="white",
+              edgecolor="none")
     _save(fig, "fig3_loss_is_blind", outdir)
 
 
@@ -263,7 +295,7 @@ def fig4(res, outdir):
               ("neutral", "+ neutrality"), ("neutral+freq", "+ measured frequency")]
     cols = [C["vermillion"], C["purple"], C["skyblue"], C["green"]]
 
-    fig, axes = plt.subplots(1, 4, figsize=(7.2, 2.1))
+    fig, axes = plt.subplots(1, 4, figsize=(7.2, 2.4))
     for ax, (key, ttl), col in zip(axes, stages, cols):
         ax.add_patch(Circle((0, 0), 1.0, fill=False, color=MUTED, lw=1.0,
                             ls=(0, (4, 3))))
@@ -280,6 +312,17 @@ def fig4(res, outdir):
         out = sum(int((np.linalg.norm(np.array(r["spectrum"][key]), axis=1)
                        > LIM).sum()) for r in rows)
         extra = f"\n{out} beyond frame" if out else ""
+        # Interpolated operating points only, which is the regime the figure
+        # is about and the column the manuscript quotes for this comparison.
+        # Pooling train/interp/extrap gives a third set of numbers that would
+        # not match any table.
+        d = [abs(r[key]) for r in rows
+             if r.get(key) is not None and r.get("split") == "interp"]
+        if d:
+            md = float(np.median(d))
+            extra += f"\n$\\delta$ = {md:.1e},  {1 / (4 * md):.0f} P  (interp)"
+        else:
+            extra += "\n$\\delta$ undefined (diverges)"
         ax.set_title(f"{ttl}\nmax |$\\lambda$| = {rad:.2f}{extra}", fontsize=6.5)
         ax.set_xlim(-LIM, LIM); ax.set_ylim(-LIM, LIM)
         ax.set_aspect("equal"); ax.grid(False)
@@ -312,8 +355,8 @@ def fig5(res, outdir):
     tr = sorted({r["Re"] for r in rows if r["split"] == "train"})
     for R in tr:
         ax.axvline(R, color="#e8e8e8", lw=3, zorder=0)
-    ax.annotate("shaded: training Re", (0.98, 0.03), xycoords="axes fraction",
-                fontsize=6, color=MUTED, ha="right", va="bottom")
+    ax.annotate("shaded: training Re", (0.02, 0.03), xycoords="axes fraction",
+                fontsize=6, color=MUTED, ha="left", va="bottom")
     ax.set_yscale("log")
     ax.set_xlabel("Reynolds number")
     ax.set_ylabel("usable horizon  $1/(4|\\delta|)$  (periods)")
@@ -364,10 +407,14 @@ def fig6(res, outdir):
                 fontsize=6, color=INK, ha="left")
     for nu in (1e-3, 1e-4):
         ax.axvline(nu, color="#e3e3e3", lw=6, zorder=0)
-    ax.annotate("FNO benchmark settings\n(a third, ν = 10⁻⁵, lies further left)",
-                (8.5e-4, 5e0), fontsize=6, color=MUTED, ha="right", va="top")
-    ax.annotate("steady: no oscillation to fit", (7e-3, 5e-3), fontsize=6,
-                color=MUTED, ha="center")
+    # This label was placed at y = 5 on an axis whose data top is ~1.2, so it
+    # was clipped and never drew. Axes coordinates instead.
+    ax.annotate("shaded: FNO benchmark settings\n"
+                "(a third, ν = 10⁻⁵, lies off-scale left)",
+                (0.02, 0.97), xycoords="axes fraction",
+                fontsize=6, color=MUTED, ha="left", va="top")
+    ax.annotate("steady: no oscillation to fit", (0.97, 0.55),
+                xycoords="axes fraction", fontsize=6, color=MUTED, ha="right")
     ax.set_xscale("log"); ax.set_yscale("log")
     ax.set_xlabel("viscosity  ν")
     ax.set_ylabel("split-half instability of the period fit")
