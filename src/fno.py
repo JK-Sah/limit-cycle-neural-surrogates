@@ -106,8 +106,75 @@ class FNO2d(nn.Module):
         return x + y if self.residual else y
 
 
+def _project(x, modes, mean, scale):
+    """POD coefficients of a batch of fields, the same map measure_delta uses.
+
+    Kept as one function so the quantity the loss sees and the quantity the
+    paper reports cannot drift apart.
+    """
+    f = x.reshape(x.shape[0], -1) * scale
+    return (f - mean) @ modes
+
+
+def whitener(coefs):
+    """Inverse square root of the leading POD pair's covariance.
+
+    The angle increment of an elliptical orbit is not uniform, so a partial arc
+    gives a biased rate. The bias vanishes in expectation over uniformly random
+    start phases, but per batch it is large -- on a 2:1 ellipse it reaches 5%,
+    which would swamp the 1e-5 delta this term is meant to reach. Whitening the
+    pair makes the dominant ellipticity exactly circular and leaves only the
+    residual harmonic non-uniformity, which on this wake is ~0.5%.
+    """
+    C = np.cov(coefs[:, :2].T)
+    w, V = np.linalg.eigh(C)
+    return (V / np.sqrt(np.maximum(w, 1e-300))) @ V.T
+
+
+def _batch_delta(c, T_snap, W=None):
+    """Relative period error implied by one rollout, from the leading POD pair.
+
+    The shedding pair spans the phase direction, so z = c1 + i*c2 advances by
+    2*pi*dt/T per step on a correct orbit. Summing per-step increments rather
+    than taking the endpoint angle avoids wrapping: one step is 2*pi/T ~ 0.2 rad
+    at 32 snapshots per period, while a 25-step segment spans 4.9 rad and would
+    wrap.
+
+    Returns delta on the same convention as the rest of the paper,
+    (T_model - T_true)/T_true, so a model that runs SLOW gives delta > 0. Note
+    the inversion: a slow model has a SMALLER angular rate, so the period error
+    is the reciprocal of the rate ratio, not the rate ratio itself.
+
+    The instantaneous angular rate is NOT uniform around a wake orbit -- an
+    earlier attempt at this pinned theta' pointwise and failed for exactly that
+    reason. What is invariant is the MEAN rate over a full cycle, so this
+    whitens the pair (removing the ellipticity), averages over the segment and
+    over the batch, and relies on batch starts being redrawn every epoch: the
+    mean advance over K steps, averaged over uniformly distributed starts, is
+    exactly K*2*pi/T whatever the orbit's shape.
+    """
+    zr, zi = c[:, :, 0], c[:, :, 1]
+    if W is not None:
+        zr, zi = W[0, 0] * zr + W[0, 1] * zi, W[1, 0] * zr + W[1, 1] * zi
+    # arg(z_{k+1} * conj(z_k)), computed without forming complex tensors
+    re = zr[:, 1:] * zr[:, :-1] + zi[:, 1:] * zi[:, :-1]
+    im = zi[:, 1:] * zr[:, :-1] - zr[:, 1:] * zi[:, :-1]
+    mag = ((zr[:, :-1] ** 2 + zi[:, :-1] ** 2)
+           * (zr[:, 1:] ** 2 + zi[:, 1:] ** 2))
+    keep = (mag > 1e-20).to(mag.dtype)        # a collapsed orbit has no phase
+    n = keep.sum()
+    dth = torch.atan2(im, re)
+    mean_dth = (dth * keep).sum() / n.clamp(min=1.0)
+    rate = 2 * math.pi / T_snap
+    # No orbit to measure, or a stalled one: contribute nothing rather than
+    # dividing by zero.
+    if n.item() == 0 or abs(mean_dth.detach().item()) < 1e-12 * rate:
+        return mean_dth * 0.0
+    return rate / mean_dth - 1.0
+
+
 def train(model, data, seg_len, epochs, lr, batch, seed, noise=0.0,
-          log_every=50):
+          log_every=50, phase=0.0, pod=None, phase_warmup=0.5):
     """Multi-step rollout loss on field segments, matching the other models.
 
     `noise` switches on pushforward-style noise injection, one of the three
@@ -116,6 +183,25 @@ def train(model, data, seg_len, epochs, lr, batch, seed, noise=0.0,
     divergence but leaves delta where it was, that is the paper's thesis
     demonstrated on the architecture the field actually deploys -- amplitude
     stabilised, phase untouched.
+
+    `phase` switches on the one term in this study that targets the neutral
+    direction instead of the transverse one. It penalises the squared relative
+    period error implied by the segment, so it is in the same units as the
+    delta the paper reports and a weight of 1 means "a delta of 1 costs 1".
+    It needs the measured reference period, exactly as the classical remedy in
+    section 5 does; at an unseen parameter that period is not available, which
+    is the limitation section 8 already establishes. Default 0.0 leaves every
+    earlier run reproducible.
+
+    Two guards on that term, both found by smoke-testing rather than reasoning.
+    Before the model has an orbit at all the implied period error is O(100), so
+    an unguarded penalty is O(w * 1e4) and flattens the fit; `phase_warmup`
+    holds the term off for that fraction of training while the rollout loss
+    establishes a cycle. And the penalty is Huber rather than square, so a single
+    pathological batch costs a bounded gradient rather than a divergent one,
+    while staying quadratic over the range that matters. Note that
+    clip_grad_norm_ at 1.0 caps the whole update, so weights far above ~1e3
+    buy little: the clip binds before the weight does.
     """
     torch.manual_seed(seed)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
@@ -126,19 +212,43 @@ def train(model, data, seg_len, epochs, lr, batch, seed, noise=0.0,
         idx = torch.randperm(n)[:batch]
         seg = torch.stack([data[i:i + seg_len + 1] for i in idx])  # [B,K+1,C,H,W]
         x = seg[:, 0]
+        want_phase = bool(phase) and ep >= phase_warmup * epochs
+        states = [x] if want_phase else None
         loss = 0.0
         for k in range(seg_len):
             if noise:
                 x = x + noise * torch.randn_like(x)
             x = model(x)
             loss = loss + torch.mean((x - seg[:, k + 1]) ** 2)
+            if want_phase:
+                states.append(x)
         loss = loss / seg_len
+        fit = loss.detach().item()
+        if want_phase and pod is not None:
+            modes, mean, T_snap, scale, W = pod
+            c = torch.stack([_project(s, modes, mean, scale) for s in states], 1)
+            dl = _batch_delta(c, T_snap, W)
+            # Huber, not a clamp. A clamp bounds the penalty but zeroes its
+            # gradient outside the range, so a model whose orbit is bad gets no
+            # phase gradient at all and can never be pulled back -- which is
+            # precisely the case the term exists for. Huber is quadratic in
+            # delta near zero, where the fine control is wanted, and linear
+            # beyond |delta| = 1, so one pathological batch costs a bounded
+            # gradient rather than a divergent one.
+            loss = loss + phase * torch.nn.functional.smooth_l1_loss(
+                dl, torch.zeros_like(dl), beta=1.0)
+        else:
+            dl = None
         opt.zero_grad(); loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step(); sched.step()
-        last = loss.detach().item()
+        # Report the fit term alone, so train_mse stays comparable with every
+        # other row in the table rather than including the penalty.
+        last = fit
         if log_every and (ep % log_every == 0 or ep == epochs - 1):
-            print(f"    ep {ep:>5}/{epochs}  loss {last:.4e}", flush=True)
+            extra = (f"  delta_batch {dl.detach().item():+.2e}"
+                     if phase and dl is not None else "")
+            print(f"    ep {ep:>5}/{epochs}  loss {last:.4e}{extra}", flush=True)
     return last
 
 
@@ -178,6 +288,11 @@ def main():
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--periods", type=int, default=100)
     ap.add_argument("--variant", choices=["residual", "direct"], default="residual")
+    ap.add_argument("--phase-weight", type=float, default=0.0,
+                    help="weight on the squared relative period error of the "
+                         "training segment; 0 reproduces the earlier runs")
+    ap.add_argument("--phase-warmup", type=float, default=0.5,
+                    help="fraction of epochs before the phase term switches on")
     ap.add_argument("--noise", type=float, default=0.0,
                     help="pushforward noise injection during rollout training")
     ap.add_argument("--seed-list", type=int, nargs="+", default=[0, 1, 2])
@@ -209,19 +324,28 @@ def main():
           f"POD {a.modes_pod} modes = {energy[:a.modes_pod].sum()*100:.3f}%",
           flush=True)
 
+    dt_ = torch.get_default_dtype()
+    train_coefs, _ = project(snap, pod_modes, pod_mean)
+    pod_t = (torch.from_numpy(pod_modes).to(dt_),
+             torch.from_numpy(pod_mean).to(dt_), T_snap, scale,
+             torch.from_numpy(whitener(train_coefs)).to(dt_))
+
     rows = []
     for seed in a.seed_list:
         t0 = time.time()
         model = FNO2d(width=a.width, modes=tuple(a.fmodes), depth=a.depth,
                       residual=(a.variant == "residual"))
         npar = sum(p.numel() for p in model.parameters())
-        print(f"  seed {seed}  variant={a.variant}  params={npar}", flush=True)
+        print(f"  seed {seed}  variant={a.variant}  "
+              f"phase_weight={a.phase_weight}  params={npar}", flush=True)
         mse = train(model, data, a.seg_len, a.epochs, a.lr, a.batch, seed,
-                    noise=a.noise)
+                    noise=a.noise, phase=a.phase_weight, pod=pod_t,
+                    phase_warmup=a.phase_warmup)
         dl, reached = measure_delta(model, data[0], n_steps, pod_modes,
                                     pod_mean, T_snap, scale)
-        rows.append(dict(arch=f"fno-{a.variant}", seed=seed, nparam=npar,
-                         noise=a.noise,
+        tag = f"fno-{a.variant}" + ("-phase" if a.phase_weight else "")
+        rows.append(dict(arch=tag, seed=seed, nparam=npar,
+                         noise=a.noise, phase_weight=a.phase_weight,
                          train_mse=mse, delta=dl, steps_reached=reached,
                          secs=time.time() - t0))
         hz = "DIVERGED" if dl is None else f"{1/(4*abs(dl)):.0f} P"
@@ -231,6 +355,7 @@ def main():
 
     ds = [abs(r["delta"]) for r in rows if r["delta"] is not None]
     summary = dict(Re=a.Re, T_snap=T_snap, variant=a.variant,
+                   phase_weight=a.phase_weight,
                    med_delta=float(np.median(ds)) if ds else None,
                    spread=(max(ds) / min(ds)) if len(ds) > 1 and min(ds) > 0 else None,
                    n_stable=len(ds), n_seeds=len(rows))

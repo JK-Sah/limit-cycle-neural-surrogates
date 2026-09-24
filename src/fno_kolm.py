@@ -26,7 +26,7 @@ import numpy as np
 import torch
 
 from period import period_from_signal
-from fno import FNO2d, train, measure_delta
+from fno import FNO2d, train, measure_delta, whitener
 
 
 def pod_basis(fields, r):
@@ -56,6 +56,11 @@ def main():
     ap.add_argument("--periods", type=int, default=100)
     ap.add_argument("--noise", type=float, default=0.0)
     ap.add_argument("--variant", choices=["residual", "direct"], default="residual")
+    ap.add_argument("--phase-weight", type=float, default=0.0,
+                    help="weight on the squared relative period error of the "
+                         "training segment; 0 reproduces the earlier runs")
+    ap.add_argument("--phase-warmup", type=float, default=0.5,
+                    help="fraction of epochs before the phase term switches on")
     ap.add_argument("--seed-list", type=int, nargs="+", default=[0])
     ap.add_argument("--threads", type=int, default=0)
     ap.add_argument("--out", default="fno_kolm.json")
@@ -80,6 +85,12 @@ def main():
           f"POD {a.modes_pod} modes = {energy[:a.modes_pod].sum()*100:.3f}% energy",
           flush=True)
 
+    dt_ = torch.get_default_dtype()
+    train_coefs = (data.reshape(len(data), -1).numpy().astype(np.float64)
+                   * scale - pmean) @ pm
+    pod_t = (torch.from_numpy(pm).to(dt_), torch.from_numpy(pmean).to(dt_),
+             T_snap, scale, torch.from_numpy(whitener(train_coefs)).to(dt_))
+
     rows = []
     for seed in a.seed_list:
         t0 = time.time()
@@ -87,13 +98,16 @@ def main():
                       ch=1, residual=(a.variant == "residual"))
         npar = sum(q.numel() for q in model.parameters())
         print(f"  seed {seed}  variant={a.variant}  noise={a.noise}  "
-              f"params={npar}", flush=True)
+              f"phase_weight={a.phase_weight}  params={npar}", flush=True)
         mse = train(model, data, a.seg_len, a.epochs, a.lr, a.batch, seed,
-                    noise=a.noise)
+                    noise=a.noise, phase=a.phase_weight, pod=pod_t,
+                    phase_warmup=a.phase_warmup)
         dl, reached = measure_delta(model, data[0], n_steps, pm, pmean,
                                     T_snap, scale)
-        rows.append(dict(arch=f"fno-kolm-{a.variant}", seed=seed, nparam=npar,
-                         noise=a.noise, train_mse=mse, delta=dl,
+        tag = f"fno-kolm-{a.variant}" + ("-phase" if a.phase_weight else "")
+        rows.append(dict(arch=tag, seed=seed, nparam=npar,
+                         noise=a.noise, phase_weight=a.phase_weight,
+                         train_mse=mse, delta=dl,
                          steps_reached=reached, secs=time.time() - t0))
         hz = "DIVERGED" if dl is None else f"{1/(4*abs(dl)):.0f} P"
         print(f"  seed {seed}  mse={mse:.3e}  "
@@ -102,6 +116,7 @@ def main():
 
     ds = [abs(r["delta"]) for r in rows if r["delta"] is not None]
     summary = dict(nu=1.7e-3, T_snap=T_snap, variant=a.variant, noise=a.noise,
+                   phase_weight=a.phase_weight,
                    med_delta=float(np.median(ds)) if ds else None,
                    n_stable=len(ds), n_seeds=len(rows),
                    pod_energy=float(energy[:a.modes_pod].sum()))
