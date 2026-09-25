@@ -3,7 +3,7 @@
 #SBATCH --account=flowlab
 #SBATCH --partition=tier3
 #SBATCH --time=1-00:00:00
-#SBATCH --nodes=1 --ntasks=1 --cpus-per-task=16 --mem=32g
+#SBATCH --nodes=1 --ntasks=1 --cpus-per-task=16 --mem=48g
 #SBATCH --output=logs/fnophase_%A_%a.out
 #SBATCH --error=logs/fnophase_%A_%a.err
 #
@@ -45,6 +45,10 @@
 #
 # 4 configs x 3 seeds = 12 tasks. Expect 13-15 h each: the seg25 runs took ~10 h
 # median and 12.2 h worst, and 32 steps is ~28% more work per epoch.
+#
+# Memory: a 6-epoch probe of this exact configuration peaked at 22.4 GB
+# resident (seg_len 32, phase term active), so 32g leaves only 30% headroom and
+# 16g OOMs outright. 48g is requested to keep a long run from dying late.
 #
 # Usage: sbatch --array=0-11 cluster/fno_phase.sh
 set -euo pipefail

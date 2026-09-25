@@ -3,7 +3,7 @@
 #SBATCH --account=flowlab
 #SBATCH --partition=tier3
 #SBATCH --time=1-12:00:00
-#SBATCH --nodes=1 --ntasks=1 --cpus-per-task=16 --mem=32g
+#SBATCH --nodes=1 --ntasks=1 --cpus-per-task=16 --mem=48g
 #SBATCH --output=logs/kolmphase_%A_%a.out
 #SBATCH --error=logs/kolmphase_%A_%a.err
 #
@@ -30,6 +30,13 @@
 # Run the wake array first. Once it identifies a working weight, this can be
 # cut to the control plus that weight -- e.g. sbatch --array=0-2,6-8 for the
 # control and w = 1e3 -- rather than spending four configurations twice.
+#
+# Memory: NOT measured on this configuration. The equivalent probe on the
+# WAKE (seg_len 32, phase term active) peaked at 22.4 GB resident, and 16g
+# OOMed outright. This field is 128x128x1 against the wake's 2x192x96, so
+# per-state activations are smaller while the segment is 40 rather than 32;
+# 48g should be ample either way, but check MaxRSS on the first task rather
+# than trusting the extrapolation.
 #
 # Usage: sbatch --array=0-11 cluster/fno_kolm_phase.sh
 set -euo pipefail
