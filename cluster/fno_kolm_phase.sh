@@ -23,13 +23,24 @@
 # the same segment length, because seg_len is otherwise a confound against the
 # seg25 rows already in the table.
 #
-# 4 configs x 3 seeds = 12 tasks. The seg25 runs here took ~10.3 h median; 40
-# steps is ~60% more work per epoch, so budget ~16 h, hence the longer wall
-# clock than the wake array.
+# The seg25 runs here took ~10.3 h median; 40 steps is ~60% more work per
+# epoch, so budget ~16 h, hence the longer wall clock than the wake array.
 #
-# Run the wake array first. Once it identifies a working weight, this can be
-# cut to the control plus that weight -- e.g. sbatch --array=0-2,6-8 for the
-# control and w = 1e3 -- rather than spending four configurations twice.
+# WEIGHTS CORRECTED. This script originally swept {0, 1e1, 1e3, 1e5}, chosen
+# before any of them had been tested. The wake sweep has since shown every one
+# of those except the control sits at or above the ceiling the term can carry:
+# w = 1e3 takes the fit from 4.7e-4 to 8.4e+0 within 50 epochs of engagement,
+# and w = 1e1 leaves delta 3.5x WORSE than control. The weight that worked was
+# 1e-1, three orders below the original guess, so this runs the control against
+# that alone.
+#
+# On the wake, w = 1e-1 gave median |delta| 8.23e-5 against the control's
+# 2.70e-4 for a 7% fit cost, and collapsed the seed spread from 102x to 2.1x.
+# The question here is whether that transfers to a second system, which is what
+# would make it a design recommendation rather than an idiosyncrasy of one
+# problem -- the same standard the direct-parameterisation result was held to.
+#
+# 2 arms x 3 seeds = 6 tasks.
 #
 # Memory: NOT measured on this configuration. The equivalent probe on the
 # WAKE (seg_len 32, phase term active) peaked at 22.4 GB resident, and 16g
@@ -38,7 +49,7 @@
 # 48g should be ample either way, but check MaxRSS on the first task rather
 # than trusting the extrapolation.
 #
-# Usage: sbatch --array=0-11 cluster/fno_kolm_phase.sh
+# Usage: sbatch --array=0-5 cluster/fno_kolm_phase.sh
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"; . .venv/bin/activate
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK PYTHONUNBUFFERED=1
@@ -49,9 +60,7 @@ CFG=$((SLURM_ARRAY_TASK_ID / 3))
 SEED=$((SLURM_ARRAY_TASK_ID % 3))
 case $CFG in
   0) W=0.0   ; TAG=seg40ctrl  ;;
-  1) W=1e1   ; TAG=seg40p1e1  ;;
-  2) W=1e3   ; TAG=seg40p1e3  ;;
-  3) W=1e5   ; TAG=seg40p1e5  ;;
+  1) W=1e-1  ; TAG=seg40p1em1 ;;
 esac
 
 python src/fno_kolm.py --data data/kolm/nu1.7e-3_snaps.npz \

@@ -1,0 +1,50 @@
+{
+ "rows": [
+  {
+   "arch": "fno-residual-phase",
+   "seed": 0,
+   "nparam": 1581730,
+   "noise": 0.0,
+   "phase_weight": 10.0,
+   "train_mse": 4.764434952401055e-05,
+   "delta": -0.0015694706891555333,
+   "steps_reached": 3215,
+   "secs": 44093.012919187546
+  }
+ ],
+ "summary": {
+  "Re": 100,
+  "T_snap": 32.1541997318967,
+  "variant": "residual",
+  "phase_weight": 10.0,
+  "med_delta": 0.0015694706891555333,
+  "spread": null,
+  "n_stable": 1,
+  "n_seeds": 1
+ },
+ "config": {
+  "data": "data/resweep",
+  "Re": 100,
+  "modes_pod": 8,
+  "width": 32,
+  "fmodes": [
+   16,
+   12
+  ],
+  "depth": 4,
+  "epochs": 3000,
+  "seg_len": 32,
+  "batch": 8,
+  "lr": 0.001,
+  "periods": 100,
+  "variant": "residual",
+  "phase_weight": 10.0,
+  "phase_warmup": 0.5,
+  "noise": 0.0,
+  "seed_list": [
+   0
+  ],
+  "threads": 16,
+  "out": "results/fno_phase/seg32p1e1_s0.json"
+ }
+}
