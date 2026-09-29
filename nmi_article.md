@@ -10,18 +10,18 @@ Technology, Rochester, NY, USA. e-mail: js8472@rit.edu
 ## Abstract
 
 A stable limit cycle has one Floquet multiplier exactly at unity along the
-orbit, forced by time-translation invariance, and the rest inside the unit
-circle. Amplitude error in a learned surrogate therefore self-corrects and phase
-error never does, so long-horizon fidelity reduces to one scalar: the relative
-period error δ, measurable from a ten-period rollout. Across 75 models δ predicts
-observed drift to a median ratio of 1.0000. Nothing in standard practice sees it.
-Of three stability methods in common use none improves δ, and a Lipschitz penalty
-degrades it 27-fold while contracting a direction that was already stable. The
-effect is not neural: least-squares dynamic mode decomposition recovers the same
-neutral multiplier, and the Fourier neural operator that fits best is the one
-that cannot finish a rollout. Imposing neutrality and a measured frequency
-together drives δ to the precision of the frequency estimate, so the usable
-horizon is computable before fitting.
+orbit, forced by time-translation invariance, the rest inside the unit circle.
+Amplitude error in a learned surrogate therefore self-corrects and phase error
+never does, so long-horizon fidelity reduces to one scalar: the relative period
+error δ, measurable from a ten-period rollout. Across 75 models δ predicts
+observed drift to a median ratio of 1.0000. Nothing in standard practice sees
+it: of three stability methods in common use none improves δ, and a Lipschitz
+penalty degrades it 27-fold while contracting an already-stable direction. Nor
+is the effect neural, since least-squares dynamic mode decomposition recovers
+the same neutral multiplier. What does reach δ is the training objective. A
+rollout segment spanning a full period improves it 81-fold on a Navier–Stokes
+operator for under 2× in fit, and imposing neutrality with a measured frequency
+drives it to the precision of that frequency estimate.
 
 ---
 
@@ -75,9 +75,8 @@ modulus is the signature of sustained oscillation. The contribution here is not
 that the neutral direction exists but that its accuracy binds a surrogate's
 usable horizon, is measurable in ten periods, and is absent from every loss and
 basis-selection criterion in standard use. Parametric reduced-order models are
-likewise known to lose stability under interpolation, and stability-preserving
-interpolation is an established line of work<sup>8,9</sup>; we sharpen the target
-by showing generic stabilisation is insufficient for a limit cycle. Neural operators<sup>10,11</sup> are tested
+likewise known to lose stability under interpolation<sup>8,9</sup>; we sharpen
+the target by showing generic stabilisation is insufficient for a limit cycle. Neural operators<sup>10,11</sup> are tested
 here because the claim is aimed at them.
 
 ## Results
@@ -104,17 +103,17 @@ sweep, spanning a 64× range of dataset size, log(train MSE) and log|δ| have
 two orders of magnitude in δ: at 64
 trajectories and width 32, seed 3 trains to 9.1 × 10⁻⁶ and gives
 δ = +1.4 × 10⁻³, a 179-period horizon, while seed 4 trains to 7.2 × 10⁻⁶ and
-gives δ = +1.1 × 10⁻⁵, still correlated past 200 periods. Scaling does not fix
-it either: median |δ| by training-set size, at roughly constant MSE, runs
+gives δ = +1.1 × 10⁻⁵, still correlated past 200 periods. Scaling does not fix it: median |δ| by training-set size, at roughly constant
+MSE, runs
 1.6 × 10⁻³ (16 trajectories), 1.3 × 10⁻⁴ (64), 2.6 × 10⁻⁴ (256), 3.3 × 10⁻⁴
-(1024) — non-monotonic, and flat within seed scatter past the smallest case.
+(1024) — non-monotonic and flat within seed scatter past the smallest case.
 
 ### Stability methods act on the transverse direction
 
 Relative to an unregularised baseline at δ = 6.0 × 10⁻⁴, none of three stability
 methods in common use improves δ beyond seed noise, and the Lipschitz penalty at
-the stronger weight makes it 27.4× worse (Extended Data Table 1). The transverse
-multiplier column is the point. These methods do act — the Lipschitz penalty
+the stronger weight makes it 27.4× worse (Extended Data Table 1). The transverse multiplier column is the point: these
+methods do act — the Lipschitz penalty
 nearly doubles |λ₂|, from 5.7 × 10⁻³ to 1.1 × 10⁻² — and what they act on is the
 direction that was already contracting.
 
@@ -148,7 +147,7 @@ model class and carries no information about a model. Exact DMD's seed spread is
 spreads by at least 1.9×, so a single-seed δ says little about a learned
 surrogate.
 
-### Neural operators, and the objective that sets the horizon
+### Neural operators, and the objective that closes the orbit
 
 Every model above acts on POD coefficients. Neural operators do not, and they
 are what operator learning is built on, so the claim has to be tested on one. We train a Fourier neural operator on the wake *fields*,
@@ -156,57 +155,63 @@ u(x, y, t) → u(x, y, t + Δt) on the full 2 × 192 × 96 grid, and measure δ 
 rolling it out for 3215 steps (100 periods), projecting onto the same 8-mode POD
 basis and fitting coefficient 1 with the same estimator. Only the model changes.
 
-The shortest training objective produces the lowest training loss of the four
-configurations and is the only one that cannot complete a rollout at all,
-diverging two-thirds of the way through (Extended Data Table 4). Lengthening the objective from 8 to 25 steps costs a factor of 2.5 in training
-loss and buys a rollout that survives. The objective horizon, not the model class, governs the outcome, and here in a
-sharper form than in the latent models, because the better-fitting model is the
-one that breaks. `linear-sgd` makes the
-same point from the other side: it is exactly DMD's hypothesis class, one matrix,
-fitted by Adam on a 25-step rollout instead of by least squares on one step, and
-it is 6× better. We predicted the opposite. Optimized DMD<sup>13</sup> rules out
-the optimiser with a third algorithm: fitting the same exponential model against
-the whole trajectory beats exact DMD by 26,700× on a single-Re basis, so it is
-the objective horizon rather than the model class or the optimiser that recovers
-the frequency.
+The shortest objective produces the lowest training loss of the four
+configurations and is the only one that cannot complete a rollout, diverging
+two-thirds of the way through (Extended Data Table 4); lengthening it from 8 to
+25 steps costs 2.5× in training loss and buys a rollout that survives. The
+objective horizon, not the model class, governs the outcome, and in a sharper
+form than in the latent models, because the better-fitting model is the one that
+breaks. Two further algorithms separate the objective from the model class and the
+optimiser. `linear-sgd` is DMD's hypothesis class, one matrix, fitted by Adam on a 25-step
+rollout rather than by least squares on one step, and is 6× better; optimized
+DMD<sup>13</sup>, fitted against the whole trajectory, beats exact DMD by
+26,700× on a single-Re basis.
 
-Rollout survival is itself seed-dependent and equally invisible to the loss: one
-of five residual seeds diverges at step 2010 having trained to 6.56 × 10⁻⁶,
-against 5.99 × 10⁻⁶ for the best seed that survives.
+**The objective must close the orbit.** Lengthening the segment until it spans a
+full shedding period is the largest single improvement in δ we obtain. At 32.15
+snapshots per period a 32-step objective covers 0.995 of a revolution; over
+seven seeds it gives δ = 1.93 × 10⁻⁴ against the 25-step objective's 4.48 ×
+10⁻⁴, and every rollout completes rather than four of five. On the Navier–Stokes
+field, where a period is 40.02 snapshots, going from 25 to 40 steps improves δ
+by 81×, from 1.20 × 10⁻² to 1.47 × 10⁻⁴, moving the usable horizon from 21 periods to 1696 (Extended Data Tables 4, 5).
+Training loss pays 1.3× and 1.8×. The magnitudes track how far each fell short
+of a period: 0.62 on Navier–Stokes, 0.78 on the wake. A segment that closes the
+orbit constrains the phase accumulated over one revolution; one that stops short
+leaves it free.
 
-Noise injection is the informative case, because its effect is confined. It rescues the diverging seed — 5 of 5 rollouts complete rather than
-4 of 5 — and leaves the median period error where it was, 4.90 × 10⁻⁴ against
-4.48 × 10⁻⁴, a ratio of 1.09. A stability method restored stability and did not
-touch the phase. Its one cost is reproducibility: the seed spread widens from
-141× to 890×.
+Noise injection is the informative case, because its effect is confined. It
+rescues the diverging seed — 5 of 5 rollouts complete rather than 4 of 5 — and
+leaves the median period error where it was, 4.90 × 10⁻⁴ against 4.48 × 10⁻⁴, a
+ratio of 1.09: a stability method restored stability and did not touch the
+phase. Its one cost is reproducibility, the seed spread widening from 141× to
+890×.
 
-Everything above acts on a wake compressed to eight POD coefficients, which
-leaves open whether the period error belongs to the problem or to
-low-dimensional latent dynamics. We close that by measuring δ on the
-two-dimensional Navier–Stokes equations directly, in the forcing geometry of the
-FNO benchmark itself<sup>10</sup>, on the full 128 × 128 vorticity field.
+Everything above acts on a wake compressed to eight POD coefficients, leaving
+open whether the period error belongs to the problem or to low-dimensional
+latent dynamics. We close that by measuring δ on the two-dimensional
+Navier–Stokes equations directly, in the forcing geometry of the FNO
+benchmark<sup>10</sup>, on the full 128 × 128 vorticity field.
 
 Locating a usable case is part of the result. The benchmark ships at ν = 10⁻³,
 10⁻⁴ and 10⁻⁵, and a split-half refit disagrees with itself by 10⁻³ to 10⁻¹ at
 all three, so a δ quoted on them would measure nothing (Fig. 6). Sweeping
-viscosity leaves the flow steady for ν ≥ 1.9 × 10⁻³ and aperiodic for
-ν ≤ 1.8 × 10⁻³, with a narrow window at ν = 1.7 × 10⁻³ where the attractor is a
-clean limit cycle: split-half 4.8 × 10⁻⁹ over 51 periods, enstrophy steady to 8 × 10⁻⁴.
+viscosity leaves the flow steady for ν ≥ 1.9 × 10⁻³ and aperiodic for ν ≤ 1.8 ×
+10⁻³, with a narrow window at ν = 1.7 × 10⁻³ where the attractor is a clean
+limit cycle: split-half 4.8 × 10⁻⁹ over 51 periods.
 
-Measured there, the residual operator fits fifteen times better than the direct
-one and has a fifty times worse period: a usable horizon of 21 cycles against
-1042 (Extended Data Table 5). On the wake the same comparison was 2.2× in loss and 52× in δ, so moving to the field widens the loss advantage while the period
-disadvantage holds. Nothing differs between those two rows except whether the
-network predicts the field or the increment. The direct parameterisation is also the most reproducible on both systems, 2×
-seed spread here against 10× on the wake, which makes it a design recommendation
-rather than an idiosyncrasy. Noise injection we report as undetermined: across both systems its
+Measured there at 25 steps, the residual operator fits fifteen times better than
+the direct one and has a fifty times worse period: a horizon of 21 cycles
+against 1042 (Extended Data Table 5). On the wake the same comparison was 2.2×
+in loss and 52× in δ. Nothing differs but whether the network predicts the field or the increment. The
+direct parameterisation is also the most reproducible on both systems, 2× seed
+spread against 10× on the wake. Noise injection we report as undetermined: across both systems its
 effect on δ is not resolvable at these seed counts.
 
-One property of this case belongs in the open. Eight POD modes capture 100.000%
-of the energy, so the attractor is effectively eight-dimensional even though the
-state has 16,384 components and the operator acts on all of them. That is a feature of the object rather than a weakness of the test: a limit
-cycle is low-dimensional by construction, which is why the Floquet argument
-applies.
+One property of this case belongs in the open: eight POD modes capture 100.000%
+of the energy, so the attractor is effectively eight-dimensional though the
+state has 16,384 components. That is a feature of the object rather than a
+weakness of the test — a limit cycle is low-dimensional by construction, which
+is why the Floquet argument applies.
 
 ### Neutrality and frequency are both necessary
 
@@ -226,21 +231,20 @@ construction, δ is computable in closed form before any model is fitted. A
 practitioner can select the frequency interpolant by cross-validation on measured
 frequencies alone and know the usable horizon in advance.
 
-Generic stabilisation is a real intervention rather than a straw man. It clips
+Generic stabilisation is a real intervention rather than a straw man: it clips
 every non-dominant eigenvalue with a positive growth rate back onto the unit
-circle, but it cannot identify which eigenvalue carries the phase, so it leaves
-the dominant pair untouched and the spectral radius at 2.96. Neither property suffices alone.
+circle, but cannot identify which one carries the phase, so it leaves the
+dominant pair untouched and the radius at 2.96. Neither property suffices alone.
 Neutrality without the frequency stabilises every rollout and leaves a 3-period
-horizon; frequency without neutrality diverges, since correcting an eigenvalue's
-imaginary part does nothing about a real part at 1.1 to 31. Careful
+horizon; frequency without neutrality diverges, since correcting an imaginary
+part does nothing about a real part at 1.1 to 31. Careful
 eigen-interpolation, the fair version a reviewer would propose, still diverges in
 7 of 11 cases.
 
 ### Conditioning on a parameter costs the horizon
 
 At a single operating point the effect is real and small: a well-trained free
-latent ODE reaches δ ≈ 2.6 × 10⁻⁵ on the Re = 100 wake, a horizon near 10⁴
-shedding periods, past any engineering need.
+latent ODE reaches δ ≈ 2.6 × 10⁻⁵ on the Re = 100 wake, a horizon near 10⁴ periods, past any engineering need.
 
 Surrogates are built to cover a parameter range. Conditioning on Reynolds number,
 with the POD basis built from training Re only so held-out values never enter the
@@ -254,10 +258,9 @@ factor of 20 in horizon, and the loss does not report it.
 Our own anchoring remedy fails here, and the cause is identifiable rather than
 assumed. Anchoring the phase to a measured frequency wins in-distribution, 15× at
 training parameters and 1.8× at held-out ones, and loses badly outside the
-training range, at 1 period against the free baseline's 9. We ran two frequency
-interpolants whose predicted extrapolation errors differ by 4×; if ω were
-responsible their measured errors would differ too, and instead they coincide to within 1–3% at Re = 200 and 220 while differing by
-up to 5× at interpolated Re.
+training range, at 1 period against the free baseline's 9. Two frequency interpolants whose predicted extrapolation errors differ by 4×
+produce measured errors coinciding to within 1–3% at Re = 200 and 220, while
+differing by up to 5× at interpolated Re, so ω is not responsible.
 The cause is structural: the observable is a = Z(φ, μ) + s, whose period equals
 2π/ω(μ) only when the transverse part s decays and Z is a faithful loop. Both
 are learned functions of μ and both are out of distribution at unseen μ, so the
@@ -273,13 +276,13 @@ not depend on where in the cycle a surrogate believes it is, while phase-resolve
 quantities should decorrelate at N ≈ 1/(4δ). Rolling seven
 surrogates out to 30,000 shedding periods, phase-resolved error follows
 2|sin(πδN)| with per-model median observed/predicted ratios of 1.02–1.08
-(Extended Data Table 8), and per seed the first crossing of √2 matches the
-predicted 1/(4δ) to a median ratio of 1.52 across 14 runs, within one sampling interval. Covariance error over a 3000-fold increase in rollout
+(Extended Data Table 8), and the first crossing of √2 matches the predicted 1/(4δ) to a median ratio of
+1.52 across 14 runs. Covariance error over a 3000-fold increase in rollout
 length grows by 1.0–1.1× for every model with an attractor (Extended Data
 Table 9).
 
-The exceptions are the argument rather than counterexamples to it. A linear
-surrogate has no attractor, so nothing bounds its amplitude except |λ| itself,
+The exceptions are the argument rather than counterexamples. A linear surrogate
+has no attractor, so nothing bounds its amplitude but |λ| itself,
 and exact DMD's |λ| = 1.00001312 compounds over 9.7 × 10⁵ steps to a covariance
 error of 3.8 × 10⁹. Neutrality keeps amplitude bounded; without it even the
 phase-invariant statistics fail.
@@ -304,10 +307,9 @@ never better than 1.1 × 10⁻⁶, separated by a factor of 118 without overlap.
 
 The obvious generalisation does not work. Replacing one scalar with two,
 err = √(Σₖ wₖ · 4 sin²(π δₖ Nₖ)), gives observed/predicted 1.04 at ε = 0 but
-3.19, 0.81 and 0.68 at ε = 0.1, 0.2 and 0.3, and is worse than the
-single-frequency law once locked. One agreeing case is not a law. A
-weight-imbalance account of which quasi-periodic cases survive is also refuted:
-the two frequency families carry 0.44–0.56 of the energy at every coupling.
+3.19, 0.81 and 0.68 at ε = 0.1, 0.2 and 0.3, and is worse than the single-frequency law once locked. A weight-imbalance
+account of which cases survive is also refuted: the two frequency families carry
+0.44–0.56 of the energy at every coupling.
 
 ## Discussion
 
@@ -322,9 +324,8 @@ Methods that impose both properties succeed whether learned or classical. Harmon
 parametric ROM, and a phase-anchored latent model all reach δ within an order of
 magnitude of their frequency estimate's own precision. Methods that impose
 neither fail in characteristic ways: exact DMD by being 17,000× basis-sensitive,
-the GRU by having no cycle at all, free optimized DMD by growing an unconstrained
-mode that leaves its analytic frequency excellent (δ = 1.3 × 10⁻⁶) and its
-100-period rollout destroyed (δ = 3.1 × 10⁻¹).
+the GRU by having no cycle at all, free optimized DMD by growing an unconstrained mode that leaves its analytic
+frequency excellent and its 100-period rollout destroyed.
 
 The two properties also decide what survives a long rollout, not only the period.
 Neutrality bounds the amplitude, so a surrogate that has it keeps its
@@ -335,8 +336,9 @@ despite having smaller δ.
 The practical recommendations are short. Check that the period fit is well-posed
 by splitting the record and refitting, since on a quasi-periodic attractor a δ
 can be reported that means nothing. Then report δ; it is measurable from ten
-periods and predicts decorrelation at 1/(4δ). Do not read long-horizon fidelity off a validation error. Report more than one
-seed. Match the surrogate to the question: for time-averaged statistics almost
+periods and predicts decorrelation at 1/(4δ). Train on a rollout segment long enough to close the orbit: one that spans a full
+period is worth up to 81× in δ and costs under 2× in fit. Do not read long-
+horizon fidelity off a validation error. Report more than one seed. Match the surrogate to the question: for time-averaged statistics almost
 anything with an attractor will do, and for phase-resolved work the horizon is
 fixed in advance by δ. If the frequency can be measured, impose it together with
 neutrality, expecting the benefit in-distribution only.
@@ -347,19 +349,18 @@ periodic. Chaotic attractors have no periodic orbit and the argument does not tr
 For the quasi-periodic side we locate the boundary and give a test for it, but
 supply no replacement law once there.
 The wake is two-dimensional at Reynolds numbers where the physical flow becomes
-three-dimensional above roughly 190, so the extrapolation points are numerically
-valid and physically artificial, and reference-period jitter grows to
-3 × 10⁻⁴ at Re = 220, below which δ is not resolvable there. Parameter sweeps are
+three-dimensional above roughly 190, so the extrapolation points are numerically valid and physically artificial;
+reference-period jitter grows to 3 × 10⁻⁴ at Re = 220, below which δ is not
+resolvable. Parameter sweeps are
 one-dimensional; real operators condition on several parameters at once.
 
 The relationship between training loss and δ is a correlation-versus-causation
-trap, and we fell into one version of it before correcting it. Within a fixed
-architecture and objective the two are unrelated (ρ = −0.22, p = 0.15 over 45
-unregularised oscillator runs); pool across heterogeneous conditions and a
-positive association appears (ρ = +0.30, p = 0.009 over all 75). Neither is
-evidence that loss predicts δ. It is the ordinary fact that a model class which
-fits badly also tracks the period badly, and pooling classes manufactures the
-trend. What the claim rests on is the spread at fixed everything, which no
+trap we fell into before correcting it. Within a fixed architecture and
+objective the two are unrelated (ρ = −0.22, p = 0.15 over 45 unregularised
+oscillator runs); pool across heterogeneous conditions and a positive
+association appears (ρ = +0.30, p = 0.009 over all 75). Neither is evidence that
+loss predicts δ: a model class which fits badly also tracks the period badly,
+and pooling classes manufactures the trend. What the claim rests on is the spread at fixed everything, which no
 loss-based criterion can select against.
 
 ## Methods
@@ -458,9 +459,11 @@ depth 4, and retains 16 × 12 Fourier modes on the wake and 16 × 16 on the
 Navier–Stokes field, with a lifting 1 × 1 convolution, four spectral-convolution
 blocks each paired with a 1 × 1 bypass, and a two-layer GELU projection head
 (1,581,730 parameters). It is trained by Adam at learning rate 10⁻³ with
-cosine-annealed decay, batch 8, for 3000 epochs on rollout segments of 8 or 25
-steps, in direct and residual parameterisations, with noise injection at
-amplitude 10⁻³ where stated. Inputs are normalised by the maximum field
+cosine-annealed decay, batch 8, for 3000 epochs on rollout segments of 8, 25 or 32 steps on the wake and 25 or
+40 on the Navier–Stokes field, in direct and residual parameterisations, with
+noise injection at amplitude 10⁻³ where stated. The 32- and 40-step objectives
+are the shortest that span a full period on their respective systems, at 32.15
+and 40.02 snapshots per period. Inputs are normalised by the maximum field
 magnitude and a coordinate grid is appended. The DeepONet<sup>11</sup> follows
 the standard branch–trunk construction with p = 128 basis functions, branch and
 trunk widths 256, trunk depth 4, 16 Fourier features on the trunk, and the same
@@ -718,30 +721,37 @@ order it.
 | gru | 31304 | 4.88 × 10⁻⁵ | 4.49 × 10¹ | 6.0 × 10⁴× | **0 P** |
 
 **Extended Data Table 4 | Fourier neural operator on wake fields: the objective
-sets the horizon.** FNO trained on u(x, y, t) → u(x, y, t + Δt) over the full
-2 × 192 × 96 grid, five seeds, rolled out 3215 steps (100 periods) and projected
-onto the same 8-mode POD basis. "stable" counts seeds completing the rollout, and median training MSE is taken
-over the surviving seeds. The 8-step objective reaches the lowest training loss
-of the four and is the only one that cannot finish a rollout.
+sets the horizon.** FNO trained on u(x, y, t) → u(x, y, t + Δt) over the full 2 × 192 × 96 grid,
+five seeds except seven for the 32-step row, rolled out 3215 steps (100 periods)
+and projected onto the same 8-mode POD basis. "stable" counts seeds completing
+the rollout, and median training MSE is taken over the surviving seeds. T is the
+shedding period, 32.15 snapshots. The 8-step objective reaches the lowest
+training loss of the four residual configurations and is the only one that
+cannot finish a rollout; extending the objective until it closes the orbit gives
+the best residual δ and the only configuration in which every seed survives.
 
 | training objective | variant | stable | med train MSE | med \|δ\| | seed spread | horizon |
 |---|---|---|---|---|---|---|
-| 8-step rollout | residual | 0/1 | **2.88 × 10⁻⁶** | diverged at step 645 | — | **0 P** |
-| 25-step rollout | residual | 4/5 | 7.3 × 10⁻⁶ | 4.48 × 10⁻⁴ | 141× | 558 P |
-| 25-step rollout | direct | **5/5** | 1.58 × 10⁻⁵ | **8.61 × 10⁻⁶** | **10×** | **29033 P** |
+| 8-step rollout (0.25 T) | residual | 0/1 | **2.88 × 10⁻⁶** | diverged at step 645 | — | **0 P** |
+| 25-step rollout (0.78 T) | residual | 4/5 | 7.3 × 10⁻⁶ | 4.48 × 10⁻⁴ | 141× | 558 P |
+| **32-step rollout (1.00 T)** | residual | **7/7** | 9.79 × 10⁻⁶ | **1.93 × 10⁻⁴** | 102× | **1292 P** |
+| 25-step rollout (0.78 T) | direct | 5/5 | 1.58 × 10⁻⁵ | **8.61 × 10⁻⁶** | **10×** | **29033 P** |
 | 25-step + noise injection | residual | 5/5 | 1.92 × 10⁻⁵ | 4.90 × 10⁻⁴ | 890× | 510 P |
 
 **Extended Data Table 5 | Fourier neural operator on the Navier–Stokes field at
-ν = 1.7 × 10⁻³.** Operator acting on the full 128 × 128 vorticity field in the
-forcing geometry of the FNO benchmark, three seeds, rollouts of 4002 steps
-(100 periods). The residual parameterisation fits fifteen times better and has a
-fifty times worse period.
+ν = 1.7 × 10⁻³.** Operator acting on the full 128 × 128 vorticity field in the forcing geometry of
+the FNO benchmark, three seeds, rollouts of 4002 steps (100 periods). T is the
+period, 40.02 snapshots. At a 25-step objective the residual parameterisation
+fits fifteen times better than the direct one and has a fifty times worse
+period; extending that objective to close the orbit improves its δ by 81× for
+1.8× in fit, which is the largest effect of any intervention in this study.
 
-| variant | stable | med train MSE | med \|δ\| | seed spread | horizon |
-|---|---|---|---|---|---|
-| residual | 3/3 | **2.14 × 10⁻⁶** | **1.20 × 10⁻²** | 12× | **21 P** |
-| direct | 3/3 | 3.24 × 10⁻⁵ | 2.40 × 10⁻⁴ | **2×** | **1042 P** |
-| + noise injection | 3/3 | 9.69 × 10⁻⁶ | 1.89 × 10⁻³ | 148× | 132 P |
+| training objective | variant | stable | med train MSE | med \|δ\| | seed spread | horizon |
+|---|---|---|---|---|---|---|
+| 25-step (0.62 T) | residual | 3/3 | **2.14 × 10⁻⁶** | 1.20 × 10⁻² | 12× | 21 P |
+| **40-step (1.00 T)** | residual | 3/3 | 3.81 × 10⁻⁶ | **1.47 × 10⁻⁴** | **4.8×** | **1696 P** |
+| 25-step (0.62 T) | direct | 3/3 | 3.24 × 10⁻⁵ | 2.40 × 10⁻⁴ | **2×** | 1042 P |
+| 25-step + noise | residual | 3/3 | 9.69 × 10⁻⁶ | 1.89 × 10⁻³ | 148× | 132 P |
 
 **Extended Data Table 6 | Repairing an interpolated parametric operator one
 spectral property at a time.** Parametric reduced-order models across 13 Reynolds
