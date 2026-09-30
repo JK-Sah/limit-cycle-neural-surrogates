@@ -1,0 +1,51 @@
+{
+ "rows": [
+  {
+   "arch": "fno-kolm-residual-phase",
+   "seed": 1,
+   "nparam": 2105857,
+   "noise": 0.0,
+   "phase_weight": 0.1,
+   "train_mse": 0.03307694104235903,
+   "delta": 43.024809747273075,
+   "steps_reached": 4002,
+   "secs": 74359.76837325096
+  }
+ ],
+ "summary": {
+  "nu": 0.0017,
+  "T_snap": 40.022801630615184,
+  "variant": "residual",
+  "noise": 0.0,
+  "phase_weight": 0.1,
+  "med_delta": 43.024809747273075,
+  "n_stable": 1,
+  "n_seeds": 1,
+  "pod_energy": 0.9999984280339215
+ },
+ "config": {
+  "data": "data/kolm/nu1.7e-3_snaps.npz",
+  "period": 29.376736396871546,
+  "modes_pod": 8,
+  "width": 32,
+  "fmodes": [
+   16,
+   16
+  ],
+  "depth": 4,
+  "epochs": 3000,
+  "seg_len": 40,
+  "batch": 8,
+  "lr": 0.001,
+  "periods": 100,
+  "noise": 0.0,
+  "variant": "residual",
+  "phase_weight": 0.1,
+  "phase_warmup": 0.5,
+  "seed_list": [
+   1
+  ],
+  "threads": 16,
+  "out": "results/fno_kolm_phase/seg40p1em1_s1.json"
+ }
+}
