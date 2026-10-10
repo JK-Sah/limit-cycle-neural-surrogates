@@ -1,5 +1,12 @@
 # Limit-cycle neural surrogates
 
+> **Status, October 2026.** The prose, tables and figures in this README predate
+> a numerical audit of the manuscript and have not yet been updated. Where they
+> disagree with `nmi_article.md` or with the per-run records in `results/`, those
+> are authoritative. For example, the parametric wake holds 433 periods at
+> held-out Reynolds numbers and 9 when extrapolating (not ~500 and 14), and
+> anchoring's in-distribution gain is 15× (not 13×).
+
 Why learned surrogates of oscillatory systems lose the oscillation, and what to
 constrain instead.
 
