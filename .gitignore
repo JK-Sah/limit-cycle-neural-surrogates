@@ -14,3 +14,7 @@ results/**/trial_*.json
 # raw snapshot data lives on the cluster, not in the repo
 data/
 *.npz
+
+# ...except the projected 400-period rollouts of every field operator, which the
+# paper's well-posedness checks are computed from (results/seglen_v2/coefs)
+!results/seglen_v2/coefs/*.npz

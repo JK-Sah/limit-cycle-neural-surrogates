@@ -174,7 +174,7 @@ def _batch_delta(c, T_snap, W=None):
 
 
 def train(model, data, seg_len, epochs, lr, batch, seed, noise=0.0,
-          log_every=50, phase=0.0, pod=None, phase_warmup=0.5):
+          log_every=50, phase=0.0, pod=None, phase_warmup=0.5, ckpt=False):
     """Multi-step rollout loss on field segments, matching the other models.
 
     `noise` switches on pushforward-style noise injection, one of the three
@@ -202,6 +202,10 @@ def train(model, data, seg_len, epochs, lr, batch, seed, noise=0.0,
     while staying quadratic over the range that matters. Note that
     clip_grad_norm_ at 1.0 caps the whole update, so weights far above ~1e3
     buy little: the clip binds before the weight does.
+
+    `ckpt` recomputes each step's activations in the backward pass instead of
+    storing them. The arithmetic is the same; it exists because a float64
+    operator unrolled over two periods does not fit in 40 GB otherwise.
     """
     torch.manual_seed(seed)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
@@ -218,7 +222,8 @@ def train(model, data, seg_len, epochs, lr, batch, seed, noise=0.0,
         for k in range(seg_len):
             if noise:
                 x = x + noise * torch.randn_like(x)
-            x = model(x)
+            x = (torch.utils.checkpoint.checkpoint(model, x, use_reentrant=False)
+                 if ckpt else model(x))
             loss = loss + torch.mean((x - seg[:, k + 1]) ** 2)
             if want_phase:
                 states.append(x)
@@ -253,25 +258,68 @@ def train(model, data, seg_len, epochs, lr, batch, seed, noise=0.0,
 
 
 @torch.no_grad()
-def measure_delta(model, x0, n_steps, modes, mean, T_snap, scale):
+def measure_delta(model, x0, n_steps, modes, mean, T_snap, scale,
+                  return_coefs=False, n_extra=0):
     """Roll the operator out, project onto the POD basis, fit the period.
 
     Projection and period fitting are exactly the calls the latent models go
     through, so the resulting delta sits on the same axis as the rest of the
     table rather than merely resembling it.
+
+    `return_coefs` also hands back the projected trajectory, so a delta from a
+    shorter window (the ten-period claim) can be measured on the same rollout
+    afterwards instead of being asserted.
+
+    `n_extra` continues the rollout past n_steps. delta is still fitted on the
+    second half of the first n_steps, exactly as before, so it stays comparable
+    with every earlier row; the extra steps exist so a late window can be
+    fitted and split-half tested (see late_delta). A divergence inside the extra
+    steps leaves delta valid and truncates the returned coefficients.
     """
     x = x0.unsqueeze(0)
-    coefs = np.empty((n_steps, modes.shape[1]))
-    for k in range(n_steps):
+    coefs = np.empty((n_steps + n_extra, modes.shape[1]))
+    reached = n_steps + n_extra
+    for k in range(n_steps + n_extra):
         x = model(x)
-        f = x[0].numpy().reshape(-1).astype(np.float64) * scale
+        f = x[0].detach().cpu().numpy().reshape(-1).astype(np.float64) * scale
         if not np.isfinite(f).all() or np.abs(f).max() > 1e8:
-            return None, k
+            if k < n_steps:
+                return (None, k, coefs[:k]) if return_coefs else (None, k)
+            reached = k
+            break
         coefs[k] = (f - mean) @ modes
     t = np.arange(n_steps, dtype=float)
     h = n_steps // 2
-    T_meas = period_from_signal(t[h:], coefs[h:, 0])
-    return (T_meas - T_snap) / T_snap, n_steps
+    T_meas = period_from_signal(t[h:], coefs[h:n_steps, 0])
+    dl = (T_meas - T_snap) / T_snap
+    if return_coefs:
+        return dl, reached, coefs[:reached]
+    return dl, reached
+
+
+def late_delta(coefs, T_snap, n_long):
+    """delta on the second half of a long rollout, with its split-half test.
+
+    Field operators approach their own cycle slowly: on 100-period rollouts the
+    two quarters of the fitting window disagreed by a median 25% of delta for
+    residual operators (0.0% for direct ones) and sometimes in sign. Fitting periods n_long/2 to n_long and comparing its two
+    halves gives both a delta past that transient and a stated uncertainty --
+    the same well-posedness test the paper applies to data, applied to the
+    surrogate's own record.
+    """
+    n = int(n_long * T_snap)
+    if len(coefs) < n:
+        return None
+    a, b, c = n // 2, (3 * n) // 4, n
+    fit = lambda i, j, w=None: period_from_signal(np.arange(i, j, dtype=float),
+                                                  coefs[i:j, 0], w_init=w)
+    T_1, T_2 = fit(a, b), fit(b, c)
+    # seed the full-window fit from the halves: its residual is multimodal and
+    # an unseeded periodogram start can land on a different harmonic basin
+    T_all = fit(a, c, 4 * math.pi / (T_1 + T_2))
+    return dict(delta_late=(T_all - T_snap) / T_snap,
+                delta_late_halves=[(T_1 - T_snap) / T_snap, (T_2 - T_snap) / T_snap],
+                split_late=abs(T_1 - T_2) / T_all)
 
 
 def main():
@@ -297,10 +345,24 @@ def main():
                     help="pushforward noise injection during rollout training")
     ap.add_argument("--seed-list", type=int, nargs="+", default=[0, 1, 2])
     ap.add_argument("--threads", type=int, default=0)
+    ap.add_argument("--device", default="cpu")
+    ap.add_argument("--seed-init", action="store_true",
+                    help="seed the weight initialisation as well as the segment "
+                         "order (see fno_kolm.py)")
+    ap.add_argument("--ckpt", action="store_true")
+    ap.add_argument("--periods-long", type=float, default=0,
+                    help="continue the rollout to this many periods and fit delta "
+                         "on its second half with a split-half test; delta itself "
+                         "is still fitted on the first --periods, as before")
+    ap.add_argument("--save-model", default=None,
+                    help="path for the trained state_dict, so a delta can be "
+                         "re-measured later without retraining")
+    ap.add_argument("--save-coefs", default=None)
     ap.add_argument("--out", default="fno.json")
     a = ap.parse_args()
     if a.threads:
         torch.set_num_threads(a.threads)
+    dev = torch.device(a.device)
 
     snap = os.path.join(a.data, f"Re{a.Re}_snaps.npz")
     d = np.load(os.path.join(a.data, f"Re{a.Re}_signal.npz"))
@@ -316,7 +378,7 @@ def main():
     z = np.load(snap)
     fields = z["snaps"].astype(np.float32)       # [N, 2, H, W]
     scale = float(np.abs(fields).max())
-    data = torch.from_numpy(fields / scale).to(torch.get_default_dtype())
+    data = torch.from_numpy(fields / scale).to(torch.get_default_dtype()).to(dev)
     n_steps = int(a.periods * T_snap)
 
     print(f"Re={a.Re}  field {tuple(fields.shape[1:])}  N={len(fields)}  "
@@ -326,28 +388,43 @@ def main():
 
     dt_ = torch.get_default_dtype()
     train_coefs, _ = project(snap, pod_modes, pod_mean)
-    pod_t = (torch.from_numpy(pod_modes).to(dt_),
-             torch.from_numpy(pod_mean).to(dt_), T_snap, scale,
-             torch.from_numpy(whitener(train_coefs)).to(dt_))
+    pod_t = (torch.from_numpy(pod_modes).to(dt_).to(dev),
+             torch.from_numpy(pod_mean).to(dt_).to(dev), T_snap, scale,
+             torch.from_numpy(whitener(train_coefs)).to(dt_).to(dev))
 
     rows = []
     for seed in a.seed_list:
         t0 = time.time()
+        if a.seed_init:
+            torch.manual_seed(seed)
         model = FNO2d(width=a.width, modes=tuple(a.fmodes), depth=a.depth,
-                      residual=(a.variant == "residual"))
+                      residual=(a.variant == "residual")).to(dev)
         npar = sum(p.numel() for p in model.parameters())
         print(f"  seed {seed}  variant={a.variant}  "
-              f"phase_weight={a.phase_weight}  params={npar}", flush=True)
+              f"phase_weight={a.phase_weight}  params={npar}  device={dev}",
+              flush=True)
         mse = train(model, data, a.seg_len, a.epochs, a.lr, a.batch, seed,
                     noise=a.noise, phase=a.phase_weight, pod=pod_t,
-                    phase_warmup=a.phase_warmup)
-        dl, reached = measure_delta(model, data[0], n_steps, pod_modes,
-                                    pod_mean, T_snap, scale)
+                    phase_warmup=a.phase_warmup, ckpt=a.ckpt)
+        n_extra = max(0, int(a.periods_long * T_snap) - n_steps)
+        dl, reached, coefs = measure_delta(model, data[0], n_steps, pod_modes,
+                                           pod_mean, T_snap, scale,
+                                           return_coefs=True, n_extra=n_extra)
+        late = late_delta(coefs, T_snap, a.periods_long) if (a.periods_long and dl is not None) else None
+        if a.save_model:
+            torch.save(model.state_dict(), a.save_model)
+        if a.save_coefs:
+            np.savez_compressed(a.save_coefs if len(a.seed_list) == 1
+                                else a.save_coefs.replace(".npz", f"_s{seed}.npz"),
+                                coefs=coefs, T_snap=T_snap, seed=seed)
         tag = f"fno-{a.variant}" + ("-phase" if a.phase_weight else "")
         rows.append(dict(arch=tag, seed=seed, nparam=npar,
                          noise=a.noise, phase_weight=a.phase_weight,
                          train_mse=mse, delta=dl, steps_reached=reached,
-                         secs=time.time() - t0))
+                         secs=time.time() - t0,
+                         device=(torch.cuda.get_device_name(dev)
+                                 if dev.type == "cuda" else "cpu"),
+                         init_seeded=a.seed_init, **(late or {})))
         hz = "DIVERGED" if dl is None else f"{1/(4*abs(dl)):.0f} P"
         print(f"  seed {seed}  mse={mse:.3e}  "
               f"delta={'DIVERGED' if dl is None else '%+.3e' % dl}  {hz}  "

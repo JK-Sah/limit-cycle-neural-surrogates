@@ -26,7 +26,8 @@ import numpy as np
 import torch
 
 from period import period_from_signal
-from fno import FNO2d, train, measure_delta, whitener
+from fno import FNO2d, train, measure_delta, whitener, late_delta
+from unet import UNet2d
 
 
 def pod_basis(fields, r):
@@ -63,59 +64,112 @@ def main():
                     help="fraction of epochs before the phase term switches on")
     ap.add_argument("--seed-list", type=int, nargs="+", default=[0])
     ap.add_argument("--threads", type=int, default=0)
+    ap.add_argument("--arch", choices=["fno", "unet"], default="fno")
+    ap.add_argument("--device", default="cpu",
+                    help="cpu or cuda; float64 throughout either way")
+    ap.add_argument("--seed-init", action="store_true",
+                    help="seed the weight initialisation as well as the segment "
+                         "order. Runs before this flag drew initial weights from "
+                         "torch's per-process random default seed, so the seed "
+                         "fixed the data order only and no run is re-runnable "
+                         "bit for bit.")
+    ap.add_argument("--zero-init-out", action="store_true",
+                    help="U-Net only: zero the output convolution so the residual "
+                         "network starts at the identity map")
+    ap.add_argument("--ckpt", action="store_true",
+                    help="recompute activations per step in the backward pass "
+                         "(same arithmetic, needed for long segments in 40 GB)")
+    ap.add_argument("--periods-long", type=float, default=0,
+                    help="continue the rollout to this many periods and fit delta "
+                         "on its second half with a split-half test; delta itself "
+                         "is still fitted on the first --periods, as before")
+    ap.add_argument("--save-model", default=None,
+                    help="path for the trained state_dict, so a delta can be "
+                         "re-measured later without retraining")
+    ap.add_argument("--save-coefs", default=None,
+                    help="npz path for the rolled-out POD coefficients, so delta "
+                         "can be re-measured on any window afterwards")
     ap.add_argument("--out", default="fno_kolm.json")
     a = ap.parse_args()
     if a.threads:
         torch.set_num_threads(a.threads)
+    dev = torch.device(a.device)
 
     z = np.load(a.data)
-    fields = z["snaps"].astype(np.float32)          # [Nt, H, W]
+    fields = z["snaps"].astype(np.float32)          # [Nt, H, W] or [Nt, C, H, W]
+    if fields.ndim == 3:
+        fields = fields[:, None]
+    ch = fields.shape[1]
     tsnap = z["t"].astype(float)
     dt_snap = float(np.median(np.diff(tsnap)))
     T_snap = a.period / dt_snap                      # period in snapshot units
 
     pm, pmean, energy = pod_basis(fields, a.modes_pod)
     scale = float(np.abs(fields).max())
-    data = torch.from_numpy((fields / scale)[:, None]).to(torch.get_default_dtype())
+    data = torch.from_numpy(fields / scale).to(
+        torch.get_default_dtype()).to(dev)
     n_steps = int(a.periods * T_snap)
-    H, W = fields.shape[1], fields.shape[2]
+    H, W = fields.shape[2], fields.shape[3]
 
-    print(f"Kolmogorov nu=1.7e-3  field {H}x{W}  N={len(fields)}  "
+    print(f"{os.path.basename(a.data)}  field {ch}x{H}x{W}  N={len(fields)}  "
           f"T={T_snap:.2f} snaps/period  rollout={n_steps} steps  "
           f"POD {a.modes_pod} modes = {energy[:a.modes_pod].sum()*100:.3f}% energy",
           flush=True)
 
     dt_ = torch.get_default_dtype()
-    train_coefs = (data.reshape(len(data), -1).numpy().astype(np.float64)
+    train_coefs = (data.reshape(len(data), -1).cpu().numpy().astype(np.float64)
                    * scale - pmean) @ pm
-    pod_t = (torch.from_numpy(pm).to(dt_), torch.from_numpy(pmean).to(dt_),
-             T_snap, scale, torch.from_numpy(whitener(train_coefs)).to(dt_))
+    pod_t = (torch.from_numpy(pm).to(dt_).to(dev),
+             torch.from_numpy(pmean).to(dt_).to(dev),
+             T_snap, scale, torch.from_numpy(whitener(train_coefs)).to(dt_).to(dev))
 
     rows = []
     for seed in a.seed_list:
         t0 = time.time()
-        model = FNO2d(width=a.width, modes=tuple(a.fmodes), depth=a.depth,
-                      ch=1, residual=(a.variant == "residual"))
+        if a.seed_init:
+            torch.manual_seed(seed)
+        if a.arch == "fno":
+            model = FNO2d(width=a.width, modes=tuple(a.fmodes), depth=a.depth,
+                          ch=ch, residual=(a.variant == "residual"))
+        else:
+            model = UNet2d(ch=ch, residual=(a.variant == "residual"),
+                           zero_out=a.zero_init_out)
+        model = model.to(dev)
         npar = sum(q.numel() for q in model.parameters())
-        print(f"  seed {seed}  variant={a.variant}  noise={a.noise}  "
-              f"phase_weight={a.phase_weight}  params={npar}", flush=True)
+        print(f"  seed {seed}  arch={a.arch}  variant={a.variant}  "
+              f"noise={a.noise}  phase_weight={a.phase_weight}  params={npar}  "
+              f"device={dev}", flush=True)
         mse = train(model, data, a.seg_len, a.epochs, a.lr, a.batch, seed,
                     noise=a.noise, phase=a.phase_weight, pod=pod_t,
-                    phase_warmup=a.phase_warmup)
-        dl, reached = measure_delta(model, data[0], n_steps, pm, pmean,
-                                    T_snap, scale)
-        tag = f"fno-kolm-{a.variant}" + ("-phase" if a.phase_weight else "")
+                    phase_warmup=a.phase_warmup, ckpt=a.ckpt)
+        n_extra = max(0, int(a.periods_long * T_snap) - n_steps)
+        dl, reached, coefs = measure_delta(model, data[0], n_steps, pm, pmean,
+                                           T_snap, scale, return_coefs=True,
+                                           n_extra=n_extra)
+        late = late_delta(coefs, T_snap, a.periods_long) if (a.periods_long and dl is not None) else None
+        if a.save_model:
+            torch.save(model.state_dict(), a.save_model)
+        if a.save_coefs:
+            np.savez_compressed(a.save_coefs if len(a.seed_list) == 1
+                                else a.save_coefs.replace(".npz", f"_s{seed}.npz"),
+                                coefs=coefs, T_snap=T_snap, seed=seed)
+        tag = f"{a.arch}-kolm-{a.variant}" + ("-phase" if a.phase_weight else "")
         rows.append(dict(arch=tag, seed=seed, nparam=npar,
                          noise=a.noise, phase_weight=a.phase_weight,
                          train_mse=mse, delta=dl,
-                         steps_reached=reached, secs=time.time() - t0))
+                         steps_reached=reached, secs=time.time() - t0,
+                         device=(torch.cuda.get_device_name(dev)
+                                 if dev.type == "cuda" else "cpu"),
+                         init_seeded=a.seed_init, **(late or {})))
         hz = "DIVERGED" if dl is None else f"{1/(4*abs(dl)):.0f} P"
         print(f"  seed {seed}  mse={mse:.3e}  "
               f"delta={'DIVERGED' if dl is None else '%+.3e' % dl}  {hz}  "
               f"[{time.time()-t0:.0f}s]", flush=True)
 
     ds = [abs(r["delta"]) for r in rows if r["delta"] is not None]
-    summary = dict(nu=1.7e-3, T_snap=T_snap, variant=a.variant, noise=a.noise,
+    summary = dict(data=os.path.basename(a.data),
+                   nu=1.7e-3 if "kolm" in a.data else None,
+                   T_snap=T_snap, variant=a.variant, noise=a.noise,
                    phase_weight=a.phase_weight,
                    med_delta=float(np.median(ds)) if ds else None,
                    n_stable=len(ds), n_seeds=len(rows),
