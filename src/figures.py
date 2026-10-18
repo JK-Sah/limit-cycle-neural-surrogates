@@ -196,23 +196,24 @@ def fig3(res, outdir):
     fam = {"ode-mlp": ("continuous", C["skyblue"]), "ode-deep": ("continuous", C["skyblue"]),
            "ar-direct": ("discrete", C["green"]), "ar-residual": ("discrete", C["green"]),
            "gru": ("recurrent", C["purple"]), "linear-sgd": ("linear", C["vermillion"]),
-           "fno": ("operator", C["black"]), "deeponet": ("operator", C["black"]),
-           # Same hue as the other operators on purpose: the palette is capped
-           # at five separable hues, so marker shape carries the finer split.
-           "fnoNS": ("operator", C["black"])}
+           # all operators share one hue: the palette is capped at five
+           # separable hues, so marker shape carries the finer split
+           "op": ("field operator", C["black"])}
 
     rows = [r for r in _load(f"{res}/arch_v2/*.json")
             if r.get("train_mse") and r.get("delta")]
-    for pat, tag in ((f"{res}/fno/seg*.json", "fno"),
-                     (f"{res}/fno_seeds/*.json", "fno"),
-                     (f"{res}/fno_kolm/*.json", "fnoNS"),
-                     (f"{res}/deeponet_v2/*.json", "deeponet")):
-        for f in sorted(glob.glob(pat)):
-            base = os.path.basename(f).split("_s")[0].replace(".json", "")
-            j = json.load(open(f))
-            for r in j["rows"]:
-                if r.get("train_mse") and r.get("delta"):
-                    r = dict(r); r["arch"] = f"{tag}-{base}"; rows.append(r)
+    # Operators: the matched arms of the seeded GPU protocol, delta from periods
+    # 200-400. The earlier CPU operator and DeepONet points are not drawn: their
+    # rollouts were not saved, so their delta cannot be checked for being
+    # settled, and on the operators that were re-run it was not.
+    for arm in ("wake-fno-K24-b8", "wake-fnodir-K24-b8", "wake-fnonz-K24-b8",
+                "ns-fno-K25-b8", "ns-fnodir-K25-b8", "ns-fnonz-K25-b8",
+                "cardiac-fno-K25-b8", "cardiac-fnodir-K25-b8"):
+        for f in sorted(glob.glob(f"{res}/seglen_v2/{arm}_s*.json")):
+            r = json.load(open(f))["rows"][0]
+            if r.get("train_mse") and r.get("delta_late"):
+                rows.append(dict(arch=f"op-{arm}", train_mse=r["train_mse"],
+                                 delta=r["delta_late"]))
 
     grp = {}
     for r in rows:
@@ -221,7 +222,7 @@ def fig3(res, outdir):
     fig, ax = plt.subplots(figsize=(4.6, 3.4))
     pts = []
     for i, k in enumerate(sorted(grp)):
-        base = k.split("-")[0] if k.startswith(("fno", "deeponet")) else k
+        base = "op" if k.startswith("op-") else k
         label, col = fam.get(base, ("other", MUTED))
         v = grp[k]
         x = [a for a, _ in v]; y = [b for _, b in v]
@@ -232,7 +233,7 @@ def fig3(res, outdir):
         ax.plot([mx, mx], [min(y), max(y)], color=col, lw=1.0, alpha=0.55, zorder=3)
         ax.scatter([mx], [my], s=42, color=col, marker=mk, edgecolor="white",
                    linewidth=0.7, zorder=4)
-        pts.append((mx, my, not k.startswith("fnoNS")))
+        pts.append((mx, my, not k.startswith(("op-ns", "op-cardiac"))))
 
     # Legend by family, not by configuration. Colour already carries family and
     # twelve entries would cover the data; the markers separate configurations
@@ -240,7 +241,7 @@ def fig3(res, outdir):
     from matplotlib.lines import Line2D
     fams = {}
     for k in grp:
-        base = k.split("-")[0] if k.startswith(("fno", "deeponet")) else k
+        base = "op" if k.startswith("op-") else k
         lab, col = fam.get(base, ("other", MUTED))
         fams.setdefault(lab, col)
     handles = [Line2D([], [], marker="o", ls="none", color=c, label=l,
@@ -261,16 +262,16 @@ def fig3(res, outdir):
     ax.set_xscale("log"); ax.set_yscale("log")
     ax.set_xlabel("training MSE")
     ax.set_ylabel(r"$|\delta|$")
-    ax.set_title("Loss orders model classes weakly, and models not at all",
+    ax.set_title("Training loss does not order surrogates by period error",
                  fontsize=8)
     ax.annotate(
         f"across wake configurations: $\\rho$ = {rho_w:+.2f} "
         f"(p = {p_w:.3f}, n = {len(wake)})\n"
-        f"adding the Navier-Stokes operators: $\\rho$ = {rho_c:+.2f} "
+        f"adding the Navier–Stokes and cardiac operators: $\\rho$ = {rho_c:+.2f} "
         f"(p = {p_c:.3f}, n = {len(pts)})\n"
         f"within one configuration: {min(spreads):.1f}× to "
-        f"{max(spreads)/10**int(np.log10(max(spreads))):.0f} × 10"
-        f"{chr(0x2070+int(np.log10(max(spreads))))}× in $\\delta$",
+        f"{max(spreads)/10**int(np.log10(max(spreads))):.1f} × 10"
+        f"{''.join('⁰¹²³⁴⁵⁶⁷⁸⁹'[int(c)] for c in str(int(np.log10(max(spreads)))))}× in $\\delta$",
         # Below the axes rather than inside them: the scatter fills the frame
         # and every in-frame placement tried sat on top of a configuration
         # median. A white box behind the text would have hidden the point.
@@ -330,7 +331,7 @@ def fig4(res, outdir):
     axes[0].set_ylabel("Im $\\lambda$", fontsize=7)
     for ax in axes:
         ax.set_xlabel("Re $\\lambda$", fontsize=7)
-    _save(fig, "fig4_two_properties", outdir)
+    _save(fig, "fig5_two_properties", outdir)
 
 
 # ------------------------------------------------------------------ figure 5
@@ -362,7 +363,7 @@ def fig5(res, outdir):
     ax.set_ylabel("usable horizon  $1/(4|\\delta|)$  (periods)")
     ax.set_title("Conditioning on a parameter costs the horizon")
     ax.legend(loc="best", fontsize=6.5)
-    _save(fig, "fig5_parametric_collapse", outdir)
+    _save(fig, "fig6_parametric_collapse", outdir)
 
 
 # ------------------------------------------------------------------ figure 6
@@ -420,21 +421,271 @@ def fig6(res, outdir):
     ax.set_ylabel("split-half instability of the period fit")
     ax.set_title("δ is undefined at every setting the benchmark ships", fontsize=8)
     ax.legend(loc="lower right", fontsize=6.5)
-    _save(fig, "fig6_regime_map", outdir)
+    _save(fig, "ed_fig1_regime_map", outdir)
+
+
+# ------------------------------------------------------- segment-length figure
+def _seglen_rows(res, sub="seglen_v2"):
+    """Sweep rows keyed by system, architecture, K and batch, from file names.
+
+    delta is the late-window value (periods 200-400) where the run has one,
+    and `wp` marks runs whose own late record passes the split-half test the
+    paper applies to data (1e-7).
+    """
+    out = []
+    for f in sorted(glob.glob(f"{res}/{sub}/*.json")):
+        tag = os.path.basename(f)[:-5]            # ns-fno-K40-b8_s3
+        sysname, arch, k, b = tag.split("_s")[0].split("-")
+        j = json.load(open(f))
+        for r in j["rows"]:
+            d = r.get("delta_late", r["delta"]) if r["delta"] is not None else None
+            sp = r.get("split_late")
+            out.append(dict(sys=sysname, arch=arch, K=int(k[1:]), batch=int(b[1:]),
+                            seed=r["seed"], delta=d, wp=sp is not None and sp < 1e-7,
+                            mse=r["train_mse"], T=j["summary"]["T_snap"]))
+    return out
+
+
+def fig_seglen(res, outdir):
+    """Segment length as a dose-response on both systems."""
+    rows = _seglen_rows(res)
+    if not rows:
+        print("  skipping fig_seglen: no results/seglen rows")
+        return
+    # earlier CPU runs, an independent replication of two points per system
+    cpu = {"ns": [(25, r["delta"]) for r in _load(f"{res}/fno_kolm/residual_s*.json")]
+                 + [(40, r["delta"]) for r in _load(f"{res}/fno_kolm_phase/seg40ctrl_s*.json")],
+           "wake": [(25, r["delta"]) for r in _load(f"{res}/fno/seg25.json")
+                    + _load(f"{res}/fno_seeds/seg25_s*.json")]
+                   + [(32, r["delta"]) for r in _load(f"{res}/fno_phase/seg32ctrl_s*.json")
+                      + _load(f"{res}/fno_phase3/seg32ctrl_s*.json")],
+           "cardiac": []}
+    TOP = 3e-1                                    # where diverged seeds are drawn
+
+    systems = [s for s in ("ns", "wake", "cardiac") if any(r["sys"] == s for r in rows)]
+    titles = {"ns": "Navier–Stokes, 1 × 128 × 128 vorticity",
+              "wake": "cylinder wake, 2 × 192 × 96 velocity",
+              "cardiac": "cardiac spiral wave, 2 × 128 × 128 (u, v)"}
+    fig, axes = plt.subplots(1, len(systems), figsize=(2.55 * len(systems) + 0.6, 3.0),
+                             sharey=True, squeeze=False)
+    axes = axes[0]
+    for ax, sysname, letter in zip(axes, systems, "abc"):
+        ttl = f"{letter}  {titles[sysname]}"
+        sub = [r for r in rows if r["sys"] == sysname]
+        if not sub:
+            ax.set_visible(False); continue
+        T = sub[0]["T"]
+        # arms sharing a K are offset horizontally by a few hundredths of a
+        # period so their seeds do not overprint; the legend says so
+        arms = [("fno", 8, C["skyblue"], "o", "FNO", 0.0),
+                ("unetz", 8, C["vermillion"], "s", "U-Net", -0.025)]
+        for arch, b, col, mk, lab, dx in arms:
+            g = [r for r in sub if r["arch"] == arch and r["batch"] == b]
+            Ks = sorted({r["K"] for r in g})
+            if not Ks:
+                continue
+            for r in g:
+                ok = r["delta"] is not None
+                if not ok:
+                    ax.scatter(r["K"] / T + dx, TOP, s=16, color=col, lw=0.9,
+                               marker="x", zorder=2)
+                    continue
+                # filled: the surrogate's own late record passes split-half;
+                # open: its delta is the dominant frequency of an orbit that
+                # is not exactly periodic
+                ax.scatter(r["K"] / T + dx, abs(r["delta"]), s=11, marker=mk, zorder=2,
+                           facecolors=col if r["wp"] else "none", edgecolors=col,
+                           alpha=0.55, lw=0.6)
+            med = [np.median([abs(r["delta"]) for r in g if r["K"] == k
+                              and r["delta"] is not None] or [np.nan]) for k in Ks]
+            ax.plot(np.array(Ks) / T + dx, med, color=col, marker=mk, ms=4.5,
+                    markeredgecolor="white", markeredgewidth=0.5, label=f"{lab}, median",
+                    zorder=3)
+        ctl = [r for r in sub if r["arch"] == "fno" and r["batch"] != 8]
+        for b, mk in ((13, "^"), (5, "v")):
+            g = [r for r in ctl if r["batch"] == b]
+            if not g:
+                continue
+            k = g[0]["K"]
+            d = [abs(r["delta"]) for r in g if r["delta"] is not None]
+            ax.scatter([k / T + 0.025] * len(d), d, s=9, color=C["purple"], alpha=0.35,
+                       lw=0, marker=mk, zorder=2)
+            ax.scatter(k / T + 0.025, np.median(d), s=34, color=C["purple"], marker=mk,
+                       edgecolor="white", lw=0.5, zorder=4,
+                       label=f"FNO, K={k} at batch {b} (transitions matched)")
+        xs = [(k / T + 0.05, abs(d) if d is not None else TOP) for k, d in cpu[sysname]]
+        if xs:
+            ax.scatter(*zip(*xs), s=14, marker="+", color=C["black"], lw=0.7,
+                       zorder=5, label="earlier CPU runs (top row: diverged)")
+        ax.axvline(1.0, color=INK, lw=0.9, ls=(0, (4, 3)), zorder=1)
+        ax.annotate("one period", (1.02, 0.97), xycoords=("data", "axes fraction"),
+                    fontsize=6, color=INK, va="top")
+        ax.set_yscale("log")
+        ax.set_xlabel("segment length  K / T  (periods)", fontsize=7)
+        ax.set_title(ttl, loc="left", fontsize=7)
+    axes[0].set_ylabel("relative period error  |δ|")
+    sec = axes[-1].secondary_yaxis("right", functions=(lambda d: 1 / (4 * d),
+                                                       lambda h: 1 / (4 * h)))
+    sec.set_ylabel("usable horizon  1/(4|δ|)  (periods)")
+    h, l = [], []
+    for ax in axes:
+        for hh, ll in zip(*ax.get_legend_handles_labels()):
+            if ll not in l:
+                h.append(hh); l.append(ll)
+    fig.legend(h, l, loc="lower center", ncol=3, fontsize=6.3,
+               bbox_to_anchor=(0.5, -0.12))
+    _save(fig, "fig_seglen_dose_response", outdir)
+
+
+# ----------------------------------------------------------- operator figure
+def _operator_rows(res):
+    """Every v2 operator run with its outcome and, where computed, multipliers."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "operator_summary", os.path.join(os.path.dirname(__file__), "operator_summary.py"))
+    osum = importlib.util.module_from_spec(spec); spec.loader.exec_module(osum)
+    rows = []
+    for f in sorted(glob.glob(f"{res}/seglen_v2/*.json")):
+        tag = os.path.basename(f)[:-5]
+        sysname, arch, k, b = tag.split("_s")[0].split("-")
+        if arch.startswith("unet"):
+            continue
+        j = json.load(open(f)); r = j["rows"][0]; T = j["summary"]["T_snap"]
+        cf = f"{res}/seglen_v2/coefs/{tag}.npz"
+        c = np.load(cf)["coefs"] if os.path.exists(cf) else np.zeros((0, 8))
+        m = None
+        fl = f"{res}/floquet_ops/{tag}.json"
+        if os.path.exists(fl):
+            q = json.load(open(fl))
+            if q.get("status") == "ok" and np.all(np.isfinite(q["lyap_per_step"])):
+                m = sorted(q["multipliers_per_period"], reverse=True)
+        rows.append(dict(sys=sysname, arch=arch, K=int(k[1:]), b=int(b[1:]), T=T,
+                         out=osum.outcome(r, c, T), dlate=r.get("delta_late"),
+                         mse=r["train_mse"], m=m))
+    return rows
+
+
+def fig_operators(res, outdir):
+    """Residual operators lose the limit cycle; direct ones keep it."""
+    rows = _operator_rows(res)
+    if not rows:
+        print("  skipping fig_operators: no seglen_v2 rows"); return
+    systems = [("wake", "wake"), ("ns", "Navier–Stokes"), ("cardiac", "cardiac")]
+    kinds = [("fno", "residual", C["vermillion"], "o"),
+             ("fnonz", "residual + noise", C["purple"], "^"),
+             ("fnodir", "direct", C["skyblue"], "s")]
+    fig = plt.figure(figsize=(7.2, 5.4))
+    gs = fig.add_gridspec(2, 2, hspace=0.55, wspace=0.32)
+    axa, axb = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])
+    axc, axd = fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[1, 1])
+    rng = np.random.default_rng(0)
+
+    # a: weakest transverse multiplier per period
+    for i, (s, slab) in enumerate(systems):
+        for j, (arch, lab, col, mk) in enumerate(kinds):
+            v = [r["m"][1] for r in rows if r["sys"] == s and r["arch"] == arch and r["m"]]
+            if not v:
+                continue
+            x = i + (j - 1) * 0.26 + rng.uniform(-0.06, 0.06, len(v))
+            axa.scatter(x, v, s=10, color=col, marker=mk, alpha=0.6, lw=0,
+                        label=lab if i == 0 else None, zorder=3)
+            axa.plot([i + (j - 1) * 0.26 - 0.1, i + (j - 1) * 0.26 + 0.1],
+                     [np.median(v)] * 2, color=col, lw=1.6, zorder=4)
+    axa.axhline(1.0, color=INK, lw=0.8, ls=(0, (4, 3)))
+    axa.annotate("no restoring force", (2.45, 1.12), fontsize=6, ha="right", color=INK)
+    axa.set_yscale("log"); axa.set_ylim(5e-4, 2.0)
+    axa.set_xticks(range(3)); axa.set_xticklabels([s[1] for s in systems], fontsize=7)
+    axa.set_ylabel("transverse multiplier per period  $|\\lambda_2|$")
+    axa.set_title("a  Floquet spectrum of the trained operator", loc="left", fontsize=7.5)
+    axa.legend(fontsize=6, loc="lower left")
+
+    # b: outcome of every 400-period rollout, residual (all K) vs direct
+    cats = [("cycle-wp", "well-posed cycle", C["skyblue"]),
+            ("cycle", "cycle, not well-posed", "#9ccbe8"),
+            ("collapsed", "collapsed or wrong rhythm", C["vermillion"]),
+            ("late-div", "diverged after 100 periods", "#e8a07a"),
+            ("diverged", "diverged", C["black"])]
+    bars = []
+    short = {"wake": "wake", "ns": "NS", "cardiac": "cardiac"}
+    for s, slab in systems:
+        for arch, lab in (("fno", "residual"), ("fnodir", "direct")):
+            g = [r for r in rows if r["sys"] == s and r["arch"] == arch]
+            if g:
+                bars.append((f"{short[s]}\n{lab}", g))
+    for bi, (lab, g) in enumerate(bars):
+        bottom = 0.0
+        for key, clab, col in cats:
+            n = sum((r["out"] in (key, "grown")) if key == "collapsed" else (r["out"] == key)
+                    for r in g) / len(g)
+            axb.bar(bi, n, bottom=bottom, color=col, width=0.72,
+                    label=clab if bi == 0 else None, edgecolor="white", lw=0.4)
+            bottom += n
+        axb.annotate(f"n={len(g)}", (bi, 1.02), ha="center", fontsize=5.5, color=MUTED)
+    axb.set_xticks(range(len(bars))); axb.set_xticklabels([b[0] for b in bars], fontsize=5.8)
+    axb.set_ylim(0, 1.12); axb.set_ylabel("fraction of seeds")
+    axb.set_title("b  what 400 periods of rollout do", loc="left", fontsize=7.5)
+    axb.legend(fontsize=5.5, loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=3)
+
+    # c: delta_late, residual vs direct at matched K
+    pairs = [("wake", 24), ("wake", 32), ("ns", 25), ("ns", 40), ("cardiac", 25), ("cardiac", 40)]
+    TOP = 3e2
+    for pi, (s, K) in enumerate(pairs):
+        for dx, arch, col, mk in ((-0.17, "fno", C["vermillion"], "o"), (0.17, "fnodir", C["skyblue"], "s")):
+            g = [r for r in rows if r["sys"] == s and r["arch"] == arch and r["K"] == K and r["b"] == 8]
+            v = [abs(r["dlate"]) if r["dlate"] is not None else TOP for r in g]
+            ax_x = pi + dx + rng.uniform(-0.04, 0.04, len(v))
+            filled = [r["out"] == "cycle-wp" for r in g]
+            axc.scatter(ax_x, v, s=11, marker=mk, edgecolors=col,
+                        facecolors=[col if f else "none" for f in filled], lw=0.7, zorder=3)
+            ok = [abs(r["dlate"]) for r in g if r["dlate"] is not None]
+            if ok:
+                axc.plot([pi + dx - 0.1, pi + dx + 0.1], [np.median(ok)] * 2, color=col, lw=1.6)
+    axc.set_yscale("log")
+    axc.set_xticks(range(len(pairs)))
+    axc.set_xticklabels([f"{'NS' if s == 'ns' else s[:4]}\nK/T={K / next(r['T'] for r in rows if r['sys'] == s):.2f}"
+                         for s, K in pairs], fontsize=5.8)
+    axc.set_ylabel("late period error  $|\\delta|$")
+    axc.set_title("c  δ at matched objective (filled: well-posed)", loc="left", fontsize=7.5)
+
+    # d: cycle retention against segment length, residual operators
+    # one colour (these are all residual operators, the hue of panels a and c),
+    # systems told apart by marker and dash
+    for (s, slab), ls, mk in zip(systems, ("-", (0, (4, 2)), (0, (1, 1.5))), ("o", "s", "^")):
+        g = [r for r in rows if r["sys"] == s and r["arch"] == "fno" and r["b"] == 8]
+        if not g:
+            continue
+        T = g[0]["T"]; Ks = sorted({r["K"] for r in g})
+        frac = [np.mean([r["out"] in ("cycle", "cycle-wp") for r in g if r["K"] == K]) for K in Ks]
+        axd.plot(np.array(Ks) / T, frac, color=C["vermillion"], ls=ls, marker=mk, ms=4,
+                 markeredgecolor="white", markeredgewidth=0.4, label=slab)
+    axd.axvline(1.0, color=INK, lw=0.8, ls=(0, (4, 3)))
+    axd.annotate("one period", (1.03, 0.04), fontsize=6, color=INK)
+    axd.set_ylim(-0.05, 1.05)
+    axd.set_xlabel("segment length  K / T  (periods)", fontsize=7)
+    axd.set_ylabel("residual seeds keeping a cycle")
+    axd.set_title("d  longer objectives keep the cycle more often", loc="left", fontsize=7.5)
+    axd.legend(fontsize=6, loc="lower right")
+    _save(fig, "fig4_operators", outdir)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default="results")
     ap.add_argument("--outdir", default="figures")
-    ap.add_argument("--only", type=int, nargs="*")
+    ap.add_argument("--only", nargs="*", help="figure labels, e.g. 3 4 ED1")
     a = ap.parse_args()
     w = _validate_palette()
     print(f"palette worst-case CVD dE = {w:.1f} (target >= 8)")
     assert w >= 8, "palette fails CVD separation"
-    for i, fn in enumerate((fig1, fig2, fig3, fig4, fig5, fig6), start=1):
-        if a.only and i not in a.only:
+    # Labels follow the manuscript, where display items are numbered by first
+    # citation; the function names are historical. fig_seglen is not in the
+    # paper (Fig. 4d carries the segment-length result) and runs only on request.
+    figs = [("1", fig1), ("2", fig2), ("3", fig3), ("4", fig_operators),
+            ("5", fig4), ("6", fig5), ("ED1", fig6), ("seglen", fig_seglen)]
+    for lab, fn in figs:
+        if (a.only and lab not in a.only) or (not a.only and lab == "seglen"):
             continue
+        i = lab
         print(f"figure {i}: {fn.__doc__.splitlines()[0]}")
         try:
             fn(a.results, a.outdir)
