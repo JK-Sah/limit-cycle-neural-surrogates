@@ -1,0 +1,59 @@
+{
+ "rows": [
+  {
+   "arch": "fno-kolm-residual",
+   "seed": 3,
+   "nparam": 2106018,
+   "noise": 0.0,
+   "phase_weight": 0.0,
+   "train_mse": 1.849241376368057e-05,
+   "delta": null,
+   "steps_reached": 1353,
+   "secs": 607.2372789382935,
+   "device": "NVIDIA A100-PCIE-40GB",
+   "init_seeded": true
+  }
+ ],
+ "summary": {
+  "data": "ap_main_snaps.npz",
+  "nu": null,
+  "T_snap": 39.73777560012003,
+  "variant": "residual",
+  "noise": 0.0,
+  "phase_weight": 0.0,
+  "med_delta": null,
+  "n_stable": 0,
+  "n_seeds": 1,
+  "pod_energy": 0.9759613463239105
+ },
+ "config": {
+  "data": "data/cardiac/ap_main_snaps.npz",
+  "period": 33.37973150407047,
+  "modes_pod": 8,
+  "width": 32,
+  "fmodes": [
+   16,
+   16
+  ],
+  "depth": 4,
+  "epochs": 3000,
+  "seg_len": 10,
+  "batch": 8,
+  "lr": 0.001,
+  "periods": 100,
+  "noise": 0.0,
+  "variant": "residual",
+  "phase_weight": 0.0,
+  "phase_warmup": 0.5,
+  "seed_list": [
+   3
+  ],
+  "threads": 0,
+  "arch": "fno",
+  "device": "cuda",
+  "seed_init": true,
+  "ckpt": true,
+  "save_coefs": "results/seglen/coefs/cardiac-fno-K10-b8_s3.npz",
+  "out": "results/seglen/cardiac-fno-K10-b8_s3.json"
+ }
+}

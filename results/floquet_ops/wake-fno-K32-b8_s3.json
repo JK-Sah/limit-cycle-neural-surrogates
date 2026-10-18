@@ -1,0 +1,11 @@
+{
+ "tag": "wake-fno-K32-b8_s3",
+ "T_snap": 32.1541997318967,
+ "variant": "residual",
+ "seg_len": 32,
+ "delta": 5.5426418620289665e-05,
+ "delta_late": null,
+ "split_late": null,
+ "status": "diverged while settling",
+ "secs": 19.539282083511353
+}

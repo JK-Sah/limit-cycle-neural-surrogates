@@ -1,0 +1,64 @@
+{
+ "rows": [
+  {
+   "arch": "fno-residual",
+   "seed": 0,
+   "nparam": 1581730,
+   "noise": 0.0,
+   "phase_weight": 0.0,
+   "train_mse": 1.3479424913767425e-05,
+   "delta": 1.3113327096556588e-05,
+   "steps_reached": 12861,
+   "secs": 2775.201446056366,
+   "device": "NVIDIA A100-PCIE-40GB",
+   "init_seeded": true,
+   "delta_late": -1.5028939371740871e-05,
+   "delta_late_halves": [
+    -1.4917755451490067e-05,
+    -1.4251475694138027e-05
+   ],
+   "split_late": 6.66289770980611e-07
+  }
+ ],
+ "summary": {
+  "Re": 100,
+  "T_snap": 32.1541997318967,
+  "variant": "residual",
+  "phase_weight": 0.0,
+  "med_delta": 1.3113327096556588e-05,
+  "spread": null,
+  "n_stable": 1,
+  "n_seeds": 1
+ },
+ "config": {
+  "data": "data/resweep",
+  "Re": 100,
+  "modes_pod": 8,
+  "width": 32,
+  "fmodes": [
+   16,
+   12
+  ],
+  "depth": 4,
+  "epochs": 3000,
+  "seg_len": 40,
+  "batch": 8,
+  "lr": 0.001,
+  "periods": 100,
+  "variant": "residual",
+  "phase_weight": 0.0,
+  "phase_warmup": 0.5,
+  "noise": 0.0,
+  "seed_list": [
+   0
+  ],
+  "threads": 0,
+  "device": "cuda",
+  "seed_init": true,
+  "ckpt": true,
+  "periods_long": 400.0,
+  "save_model": "results/seglen_v2/models/wake-fno-K40-b8_s0.pt",
+  "save_coefs": "results/seglen_v2/coefs/wake-fno-K40-b8_s0.npz",
+  "out": "results/seglen_v2/wake-fno-K40-b8_s0.json"
+ }
+}

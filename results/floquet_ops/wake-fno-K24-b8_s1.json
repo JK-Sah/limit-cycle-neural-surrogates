@@ -1,0 +1,24 @@
+{
+ "tag": "wake-fno-K24-b8_s1",
+ "T_snap": 32.1541997318967,
+ "variant": "residual",
+ "seg_len": 24,
+ "delta": -0.0001125739027411681,
+ "delta_late": null,
+ "split_late": null,
+ "status": "ok",
+ "lyap_per_step": [
+  -Infinity,
+  -Infinity,
+  -Infinity,
+  -Infinity
+ ],
+ "multipliers_per_period": [
+  0.0,
+  0.0,
+  0.0,
+  0.0
+ ],
+ "state_norm_ratio": 1.067903765638775,
+ "secs": 25.58870840072632
+}

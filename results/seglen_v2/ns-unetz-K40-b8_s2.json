@@ -1,0 +1,68 @@
+{
+ "rows": [
+  {
+   "arch": "unet-kolm-residual",
+   "seed": 2,
+   "nparam": 1926177,
+   "noise": 0.0,
+   "phase_weight": 0.0,
+   "train_mse": 0.02945586387471393,
+   "delta": 61.396625894745576,
+   "steps_reached": 16009,
+   "secs": 11738.146861553192,
+   "device": "NVIDIA A100-PCIE-40GB",
+   "init_seeded": true,
+   "delta_late": 162.33769817086906,
+   "delta_late_halves": [
+    117.51799360332016,
+    125.48855365298344
+   ],
+   "split_late": 0.048798043188567536
+  }
+ ],
+ "summary": {
+  "data": "nu1.7e-3_snaps.npz",
+  "nu": 0.0017,
+  "T_snap": 40.022801630615184,
+  "variant": "residual",
+  "noise": 0.0,
+  "phase_weight": 0.0,
+  "med_delta": 61.396625894745576,
+  "n_stable": 1,
+  "n_seeds": 1,
+  "pod_energy": 0.9999984280339216
+ },
+ "config": {
+  "data": "data/kolm/nu1.7e-3_snaps.npz",
+  "period": 29.376736396871546,
+  "modes_pod": 8,
+  "width": 32,
+  "fmodes": [
+   16,
+   16
+  ],
+  "depth": 4,
+  "epochs": 3000,
+  "seg_len": 40,
+  "batch": 8,
+  "lr": 0.001,
+  "periods": 100,
+  "noise": 0.0,
+  "variant": "residual",
+  "phase_weight": 0.0,
+  "phase_warmup": 0.5,
+  "seed_list": [
+   2
+  ],
+  "threads": 0,
+  "arch": "unet",
+  "device": "cuda",
+  "seed_init": true,
+  "zero_init_out": true,
+  "ckpt": true,
+  "periods_long": 400.0,
+  "save_model": "results/seglen_v2/models/ns-unetz-K40-b8_s2.pt",
+  "save_coefs": "results/seglen_v2/coefs/ns-unetz-K40-b8_s2.npz",
+  "out": "results/seglen_v2/ns-unetz-K40-b8_s2.json"
+ }
+}

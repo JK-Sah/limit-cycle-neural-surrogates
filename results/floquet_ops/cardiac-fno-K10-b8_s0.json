@@ -1,0 +1,11 @@
+{
+ "tag": "cardiac-fno-K10-b8_s0",
+ "T_snap": 39.73777560012003,
+ "variant": "residual",
+ "seg_len": 10,
+ "delta": null,
+ "delta_late": null,
+ "split_late": null,
+ "status": "diverged while settling",
+ "secs": 4.1557276248931885
+}

@@ -1,0 +1,68 @@
+{
+ "rows": [
+  {
+   "arch": "fno-kolm-residual",
+   "seed": 3,
+   "nparam": 2105857,
+   "noise": 0.0,
+   "phase_weight": 0.0,
+   "train_mse": 1.9686332414081545e-06,
+   "delta": -0.00017046213115849682,
+   "steps_reached": 16009,
+   "secs": 1234.7653713226318,
+   "device": "NVIDIA A100-PCIE-40GB",
+   "init_seeded": true,
+   "delta_late": -0.00018129576885663964,
+   "delta_late_halves": [
+    -0.00018112070272970117,
+    -0.00018142144330777493
+   ],
+   "split_late": 3.0079511095467563e-07
+  }
+ ],
+ "summary": {
+  "data": "nu1.7e-3_snaps.npz",
+  "nu": 0.0017,
+  "T_snap": 40.022801630615184,
+  "variant": "residual",
+  "noise": 0.0,
+  "phase_weight": 0.0,
+  "med_delta": 0.00017046213115849682,
+  "n_stable": 1,
+  "n_seeds": 1,
+  "pod_energy": 0.9999984280339216
+ },
+ "config": {
+  "data": "data/kolm/nu1.7e-3_snaps.npz",
+  "period": 29.376736396871546,
+  "modes_pod": 8,
+  "width": 32,
+  "fmodes": [
+   16,
+   16
+  ],
+  "depth": 4,
+  "epochs": 3000,
+  "seg_len": 20,
+  "batch": 8,
+  "lr": 0.001,
+  "periods": 100,
+  "noise": 0.0,
+  "variant": "residual",
+  "phase_weight": 0.0,
+  "phase_warmup": 0.5,
+  "seed_list": [
+   3
+  ],
+  "threads": 0,
+  "arch": "fno",
+  "device": "cuda",
+  "seed_init": true,
+  "zero_init_out": false,
+  "ckpt": true,
+  "periods_long": 400.0,
+  "save_model": "results/seglen_v2/models/ns-fno-K20-b8_s3.pt",
+  "save_coefs": "results/seglen_v2/coefs/ns-fno-K20-b8_s3.npz",
+  "out": "results/seglen_v2/ns-fno-K20-b8_s3.json"
+ }
+}

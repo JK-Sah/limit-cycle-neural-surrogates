@@ -1,0 +1,11 @@
+{
+ "tag": "ns-fno-K40-b8_s0",
+ "T_snap": 40.022801630615184,
+ "variant": "residual",
+ "seg_len": 40,
+ "delta": -0.003096083582375448,
+ "delta_late": null,
+ "split_late": null,
+ "status": "diverged while settling",
+ "secs": 10.45261549949646
+}
