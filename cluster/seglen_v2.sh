@@ -41,12 +41,18 @@
 #   segment length a full 2 x 2 on every system and test it outside fluids:
 #   30 cardiac direct 0.625T   31 cardiac direct 1.0T
 #   32 NS direct K40           33 wake direct K32
+#   Added 2026-10-24 to test the Discussion's account of the residual
+#   multipliers: noise injection at 1e-3 left them at 0.96, which the account
+#   must explain. These raise the amplitude tenfold and thirtyfold:
+#   34 NS noise 1e-2 K25   35 NS noise 3e-2 K25   36 wake noise 1e-2 K24
+#   37 wake noise 3e-2 K24
 # Residual parameterisation unless stated; noise = injection at 1e-3.
 # T = 40.02 snapshots (NS), 32.15 (wake), measured (cardiac, ~39.7).
 #
 # Usage:
 #   sbatch -p debug,tier3 --qos=qos_tier3 --array=0-149 cluster/seglen_v2.sh
 #   sbatch -p debug,tier3 --qos=qos_tier3 --array=150-169 cluster/seglen_v2.sh
+#   sbatch -p debug,tier3 --qos=qos_tier3 --array=170-189 cluster/seglen_v2.sh
 # Smoke test into scratch (never results/seglen_v2), on CPU, one task per
 # system and variant: scratch/v2_smoke.sh runs tasks 0 20 30 120 135 140 with
 # DEVICE=cpu EPOCHS=2 PERIODS=2 PLONG=4 RES=scratch/v2_smoke.
@@ -89,6 +95,10 @@ case $C in
   31) SYS=cardiac; K=$(ck 1.0); VAR=direct; ARCH=fnodir ;;
   32) SYS=ns; K=40; VAR=direct; ARCH=fnodir ;;
   33) SYS=wake; K=32; VAR=direct; ARCH=fnodir ;;
+  34) SYS=ns; K=25; NOISE=1e-2; ARCH=fnonz10 ;;
+  35) SYS=ns; K=25; NOISE=3e-2; ARCH=fnonz30 ;;
+  36) SYS=wake; K=24; NOISE=1e-2; ARCH=fnonz10 ;;
+  37) SYS=wake; K=24; NOISE=3e-2; ARCH=fnonz30 ;;
   *) echo "no config $C"; exit 2 ;;
 esac
 case $SYS in ns) SCRIPT=$NS ;; wake) SCRIPT=$WK ;; cardiac) SCRIPT=$CD ;; esac

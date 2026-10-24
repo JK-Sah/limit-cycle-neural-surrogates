@@ -67,24 +67,25 @@ integrators<sup>3</sup>. What is new is that learned surrogates are trained,
 selected and stabilised by criteria that never look at it. The rollout-stability
 literature — pushforward and unrolled training<sup>4–6</sup>, noise
 injection<sup>7</sup>, spectral-norm and Jacobian regularisation<sup>8,9</sup>,
-spectral refinement<sup>10</sup> — is evaluated on rollout error, spectra or
-divergence rates, and work on chaotic systems has turned to matching the
-invariant measure<sup>11–13</sup>. We are not aware of a study that reports what
-any of it does to the frequency of a periodic solution.
+spectral refinement<sup>10</sup>, residual and integration-constrained outputs
+that hold the one-step Jacobian near the identity<sup>11–13</sup> — is evaluated
+on rollout error, spectra or divergence rates, and work on chaotic systems has
+turned to matching the invariant measure<sup>14–16</sup>. We are not aware of a
+study that reports what any of it does to the frequency of a periodic solution.
 
-Neutral eigenvalues are foundational in Koopman analysis<sup>14,15</sup>, where
+Neutral eigenvalues are foundational in Koopman analysis<sup>17,18</sup>, where
 unit modulus is the signature of sustained oscillation, and the phase is built
-in by construction in phase-reduction theory<sup>16</sup>, in Koopman
+in by construction in phase-reduction theory<sup>19</sup>, in Koopman
 autoencoders that learn their eigenvalue frequencies through an auxiliary
-network<sup>17</sup> and in rhythmic movement primitives for
-robots<sup>18</sup>. The contribution here is not that the neutral direction
+network<sup>20</sup> and in rhythmic movement primitives for
+robots<sup>21</sup>. The contribution here is not that the neutral direction
 exists but that, in a surrogate that does not build it in, its accuracy binds
 the usable horizon, is measurable from a short rollout once the surrogate's
 cycle attracts, and is absent from every loss and basis-selection criterion in
 standard use. Parametric reduced-order models are likewise known to lose
-stability under interpolation<sup>19,20</sup>; we sharpen the target by showing
+stability under interpolation<sup>22,23</sup>; we sharpen the target by showing
 generic stabilisation is insufficient for a limit cycle. Neural
-operators<sup>21,22</sup> are tested because the claim is aimed at them, and
+operators<sup>24,25</sup> are tested because the claim is aimed at them, and
 they expose a condition the argument takes for granted: that the surrogate has a
 stable limit cycle at all. In the residual parameterisation standard for
 autoregressive operators, most do not, and the reason is again a multiplier.
@@ -157,7 +158,7 @@ independent wake probe to 0.000%, confirming the latent phase is the physical
 one.
 
 Fitting a one-step linear map to those coefficients by least squares — dynamic
-mode decomposition<sup>23</sup>, no network involved — recovers the neutral
+mode decomposition<sup>26</sup>, no network involved — recovers the neutral
 multiplier to within 5 × 10⁻⁸ of unity at every Reynolds number tested (Extended
 Data Table 4). The Floquet structure belongs to the problem, not to the
 training.
@@ -171,7 +172,7 @@ of its own and drifts over a long rollout, invisible to the objective.
 
 The fitting objective matters within a fixed hypothesis class: DMD's linear map
 fitted by Adam over 25-step rollouts rather than by least squares on one step is
-6× better in δ, and optimized DMD<sup>24</sup>, fitted against the whole
+6× better in δ, and optimized DMD<sup>27</sup>, fitted against the whole
 trajectory, is 26,700× better. Training loss, by contrast, does not order these
 surrogates by period error (Fig. 3). Taking each configuration as one
 observation, the defensible unit since seeds within a configuration are not
@@ -185,11 +186,11 @@ fixed data and objective runs from 2.1× to 1.4 × 10⁶×. Exact DMD's spread i
 
 The models above act on eight POD coefficients, where a stable cycle comes
 almost for free; neural operators, the models operator learning is built on, act
-on fields. We train Fourier neural operators<sup>21</sup> on three fields: the
+on fields. We train Fourier neural operators<sup>24</sup> on three fields: the
 wake velocity on its full 2 × 192 × 96 grid; two-dimensional Navier–Stokes
 vorticity at 128 × 128 in the forcing geometry of the FNO benchmark; and a
 re-entrant spiral wave in the Aliev–Panfilov model of cardiac
-tissue<sup>25</sup>, the standard model of re-entrant arrhythmia, as a 2 × 128 ×
+tissue<sup>28</sup>, the standard model of re-entrant arrhythmia, as a 2 × 128 ×
 128 field (Methods). Finding a usable Navier–Stokes case is part of the result:
 at all three viscosities the benchmark ships, a split-half refit disagrees with
 itself by 10⁻³ to 10⁻¹, so a δ quoted there would measure nothing, and a
@@ -325,25 +326,31 @@ alternative. Interpolating operators does not preserve them, because neutrality
 is measure-zero.
 
 Why the residual parameterisation does this is not established here, but the
-form of the map suggests it. A residual step x + F(x) is the identity plus a
-learned correction, so every multiplier starts at one and moves only where the
-objective pushes it. A field operator's state has about 10⁴ dimensions and its
-attractor a handful, so nearly every transverse direction is one the training
-trajectories never probe, and there the residual map stays close to the
-identity. A direct map has no identity to fall back on and must reconstruct the
-state, which contracts what lies off the training manifold. The latent residual
-map on eight POD coefficients keeps its cycle (Extended Data Tables 2, 5), as
-this account requires, since in eight dimensions few directions go unprobed; the
-half-trained U-Net, also residual, is consistent with it but cannot test it.
+form of the map suggests an account. A residual step x + F(x) is the identity
+plus a learned correction, so every multiplier starts at one and moves only
+where the objective pushes it. That is why residual and integration-constrained
+outputs are recommended for stability: they hold the one-step Jacobian near the
+identity<sup>11,12</sup>, and on emulators of a chaotic system direct-step
+models exceed the unit circle and diverge where integration-constrained ones do
+not<sup>13</sup>; on turbulent flow residual targets make no measurable
+difference<sup>29</sup>. Those studies measure stability as the absence of
+divergence, and by that measure most residual operators here are stable: 94 of
+120 never blow up, and most of those drift or collapse instead. On a limit
+cycle, a Jacobian held near the identity in the transverse directions is what
+removes the restoring force. A field operator's state has about 10⁴ dimensions
+and its attractor a handful, so nearly every transverse direction is one the
+training trajectories never probe; a direct map has no identity to fall back on
+and must reconstruct the state, which contracts what lies off the training
+manifold. The latent residual map on eight POD coefficients keeps its cycle
+(Extended Data Tables 2, 5), as the account requires. Noise injection sits
+uneasily with it: perturbing the inputs against clean targets should teach
+contraction, yet left the multiplier at 0.96, although at 10⁻³ the perturbation
+was under 1% of the field's fluctuation and larger amplitudes are untested here.
 
 Methods that impose a neutral, correctly tuned cycle succeed whether learned or
-classical: harmonic-locked optimized DMD<sup>24</sup>, a repaired parametric ROM
-and a phase-anchored latent model all reach δ within an order of magnitude of
-their frequency estimate's precision, in distribution. Our two attempts to
-impose the phase on a learned model directly fail: anchoring loses outside the
-training range because the decoder is itself out of distribution, and a period
-penalty in an operator's objective does not transfer between systems, raising
-Navier–Stokes training loss 9,300-fold at the weight safe on the wake (Methods).
+classical, from harmonic-locked optimized DMD<sup>27</sup> to a repaired
+parametric ROM, while our attempts to impose the phase on a learned model
+directly fail out of distribution or fail to transfer between systems (Methods).
 For operators what works is structural: a parameterisation whose cycle attracts.
 
 The practical recommendations are short. Before quoting δ, check that both the
@@ -369,14 +376,10 @@ nothing about fluids, only an autonomous model with a stable periodic attractor,
 and the cardiac spiral shows it holding outside them; gaits, circadian rhythms
 and grid oscillations are untested.
 
-Our own results carry the paper's warning about single-seed δ. An earlier
-three-seed comparison had suggested that a one-period objective improves δ
-81-fold on Navier–Stokes; five seeds under a settled protocol did not reproduce
-it (Methods). Pooling heterogeneous classes likewise manufactures a loss–δ
-association that fixed configurations do not show (oscillator runs: ρ = +0.30, p
-= 0.009 over all 75; ρ = −0.22, p = 0.15 within the 45 unregularised). The
-claims rest on the spread at fixed everything, which no loss-based criterion can
-select against.
+Our own results carry the paper's warning about single-seed δ: an earlier
+three-seed comparison suggesting that a one-period objective improves δ 81-fold
+on Navier–Stokes did not survive five seeds (Methods). The claims rest on the
+spread at fixed everything, which no loss-based criterion can select against.
 
 ## Methods
 
@@ -387,7 +390,7 @@ coordinates,
 
 with μ = 0.5, ω = 1.0 and β = −0.5. The cycle radius is √μ = 0.70711, the
 angular frequency on the cycle is Ω = ω − βμ = 1.25, the period is T = 2π/Ω =
-5.02655 and the transverse Floquet multiplier is e^(−2μT) = 6.55 × 10⁻³, all in
+5.02655 and the transverse Floquet multiplier is exp(−2μT) = 6.55 × 10⁻³, all in
 closed form. Reference trajectories are produced with an adaptive Dormand–Prince
 (DOP853) integrator at rtol = atol = 10⁻¹². Training data are short segments
 from randomised initial conditions on and near the cycle; the scaling sweep
@@ -411,11 +414,11 @@ unless stated otherwise, at 32.15 snapshots per shedding period, so a 100-period
 rollout is 3215 steps. For parametric studies the POD basis is built from
 training Reynolds numbers only, so held-out values never enter the
 representation. Strouhal number is taken from a wake probe and tracks the
-Williamson correlation<sup>26</sup> with mean offset +0.09% and spread 0.90%.
+Williamson correlation<sup>30</sup> with mean offset +0.09% and spread 0.90%.
 
 **Navier–Stokes system.** The two-dimensional vorticity equation ∂w/∂t + u·∇w =
 νΔw + f, ∇·u = 0, w = ∇ × u is solved pseudo-spectrally on [0, 1]² at 128 × 128
-with the forcing of the Fourier neural operator benchmark<sup>21</sup>, using an
+with the forcing of the Fourier neural operator benchmark<sup>24</sup>, using an
 exponential-integrator Runge–Kutta scheme with dealiasing. Viscosity was swept
 over 26 values from 10⁻⁴ to 1.5 × 10⁻² to locate a periodic window: the flow is
 steady for ν ≥ 1.9 × 10⁻³, aperiodic for ν ≤ 1.8 × 10⁻³, and periodic at ν = 1.7
@@ -424,7 +427,7 @@ split-half instability of 4.8 × 10⁻⁹. A 100-period rollout at this setting 
 4002 steps. Eight POD modes carry 100.000% of the energy, so the attractor is
 effectively eight-dimensional though the state has 16,384 components.
 
-**Cardiac system.** The Aliev–Panfilov model of canine myocardium<sup>25</sup>,
+**Cardiac system.** The Aliev–Panfilov model of canine myocardium<sup>28</sup>,
 ∂u/∂t = ∇²u − ku(u − a)(u − 1) − uv, ∂v/∂t = ε(u, v)(−v − ku(u − a − 1)), ε = ε₀
 + μ₁v/(u + μ₂), is integrated with its published parameters k = 8, a = 0.15, ε₀
 = 0.002, μ₁ = 0.2 and μ₂ = 0.3 by forward Euler at time step 0.02 with a
@@ -482,7 +485,7 @@ fitted by the same optimiser and objective. Parameter counts are 20,264
 (ode-mlp, ar-residual, ar-direct), 114,440 (ode-deep), 31,304 (gru) and 64
 (linear-sgd).
 
-**Neural operators.** The Fourier neural operator<sup>21</sup> has width 32,
+**Neural operators.** The Fourier neural operator<sup>24</sup> has width 32,
 depth 4, and retains 16 × 12 Fourier modes on the wake and 16 × 16 on the
 Navier–Stokes and cardiac fields, with a lifting 1 × 1 convolution, four
 spectral-convolution blocks each paired with a 1 × 1 bypass, and a two-layer
@@ -543,7 +546,7 @@ improvement did not survive five-seed replication (median |δ| 4.4 × 10⁻⁴ a
 steps against 3.1 × 10⁻³ at 40, on the same 100-period fit), and no result here
 depends on them except the phase-penalty arms below. DeepONet runs under that
 protocol are in the repository and are not reported, because their rollouts were
-not saved for the well-posedness check. A convolutional U-Net<sup>27,28</sup>
+not saved for the well-posedness check. A convolutional U-Net<sup>31,32</sup>
 (1,926,177 parameters, circular padding, residual parameterisation, sinusoidal
 coordinate channels) was trained under the same protocol, with default and with
 a zero-initialised output layer. Under either, half the seeds stayed on a loss
@@ -560,9 +563,9 @@ transverse multiplier |λ₂| is computed from the monodromy matrix of the learn
 vector field, obtained by integrating the variational equation around the
 converged cycle.
 
-**Dynamic mode decomposition.** Exact DMD<sup>23</sup> fits a one-step linear
+**Dynamic mode decomposition.** Exact DMD<sup>26</sup> fits a one-step linear
 map to the POD coefficients by least squares, and |λ| is the modulus of its
-dominant eigenvalue. Optimized DMD<sup>24</sup> fits the same exponential model
+dominant eigenvalue. Optimized DMD<sup>27</sup> fits the same exponential model
 against the entire trajectory by Levenberg–Marquardt on the exponents with the
 linear coefficients projected out, in a free form with p independent (σ, ω)
 pairs and a harmonic-locked form constraining the modes to harmonics of one
@@ -580,7 +583,7 @@ neutrality plus an imposed measured frequency. Stability counts and median |δ|
 are reported over the 11 non-extrapolated operating points. The frequency
 interpolant is fitted to measured frequencies at training Reynolds numbers only;
 two interpolants were run, a quartic polynomial and one following the Williamson
-correlation<sup>26</sup>.
+correlation<sup>30</sup>.
 
 **Statistics.** Correlations are Spearman rank correlations on log-transformed
 quantities, two-sided and uncorrected for multiple comparisons.
@@ -588,16 +591,17 @@ Configuration-level correlations take the median over seeds within a
 configuration as one observation, since seeds within a configuration are not
 independent; the pooled and configuration-level coefficients are both reported
 wherever they differ, because pooling heterogeneous model classes manufactures a
-trend. Central tendencies are medians and dispersion is reported as a ratio of
-extremes rather than a variance, because the distributions span orders of
-magnitude. Two-arm comparisons of δ use an exact one-sided permutation test on
-the difference in median log₁₀|δ|, enumerating every relabelling of the pooled
-seeds; the same test is applied to remedies we report as failed and to those we
-recommend. Fractions of seeds are compared by one-sided Fisher exact tests. No
-data were excluded except where stated: predictions below 0.05 are excluded from
-the observed/predicted ratios of Extended Data Table 1, because near a
-recurrence the prediction is a difference of large phases and becomes acutely
-sensitive to δ.
+trend (oscillator runs: ρ = +0.30, p = 0.009 pooled over all 75; ρ = −0.22, p =
+0.15 within the 45 unregularised). Central tendencies are medians and dispersion
+is reported as a ratio of extremes rather than a variance, because the
+distributions span orders of magnitude. Two-arm comparisons of δ use an exact
+one-sided permutation test on the difference in median log₁₀|δ|, enumerating
+every relabelling of the pooled seeds; the same test is applied to remedies we
+report as failed and to those we recommend. Fractions of seeds are compared by
+one-sided Fisher exact tests. No data were excluded except where stated:
+predictions below 0.05 are excluded from the observed/predicted ratios of
+Extended Data Table 1, because near a recurrence the prediction is a difference
+of large phases and becomes acutely sensitive to δ.
 
 **Imposing the period in the objective.** Under the earlier CPU protocol, we
 tested whether δ can be controlled during training rather than measured
@@ -625,6 +629,11 @@ depends on it; Strouhal number comes from a wake probe and is unaffected.
 Technology SPORC cluster under Slurm, one seed per array task; field operators
 on NVIDIA A100 GPUs, everything else on CPUs. Submission scripts for every
 experiment are in the repository under `cluster/`.
+
+**Use of AI tools.** Anthropic's Claude was utilized for proofreading and
+language refinement, for assistance with code development, and for manuscript
+preparation. All AI-assisted outputs were reviewed and verified by the author,
+who takes full responsibility for the content.
 
 ## Data availability
 
@@ -676,50 +685,62 @@ archived with a Zenodo DOI on acceptance.
 10. Lippe, P., Veeling, B. S., Perdikaris, P., Turner, R. E. & Brandstetter, J.
    PDE-Refiner: achieving accurate long rollouts with neural PDE solvers. *Adv.
    Neural Inf. Process. Syst.* **36** (2023).
-11. Jiang, R., Lu, P. Y., Orlova, E. & Willett, R. Training neural operators to
+11. Haber, E. & Ruthotto, L. Stable architectures for deep neural networks.
+   *Inverse Probl.* **34**, 014004 (2018).
+12. Hernández Noguera, E., Ferdaus, M. M., Ioup, E., Abdelguerfi, M. & Simeonov,
+   J. Bridging spectral operator learning and U-Net hierarchies: SpectraNet for
+   stable autoregressive PDE surrogates. Preprint at
+   https://arxiv.org/abs/2605.09096 (2026).
+13. Ainslie, C., Hassanzadeh, P., Mahoney, M. W. & Chattopadhyay, A.
+   Eigenanalysis framework for autoregressive neural emulators of multi-scale
+   chaotic dynamics. Preprint at https://arxiv.org/abs/2608.16084 (2026).
+14. Jiang, R., Lu, P. Y., Orlova, E. & Willett, R. Training neural operators to
    preserve invariant measures of chaotic attractors. *Adv. Neural Inf. Process.
    Syst.* **36** (2023).
-12. Schiff, Y. et al. DySLIM: dynamics stable learning by invariant measure for
+15. Schiff, Y. et al. DySLIM: dynamics stable learning by invariant measure for
    chaotic systems. In *Proc. 41st Int. Conf. Machine Learning* 43649–43684
    (PMLR, 2024).
-13. Park, J., Yang, N. T. & Chandramoorthy, N. When are dynamical systems
+16. Park, J., Yang, N. T. & Chandramoorthy, N. When are dynamical systems
    learned from time series data statistically accurate? *Adv. Neural Inf.
    Process. Syst.* **37** (2024).
-14. Brunton, S. L., Budišić, M., Kaiser, E. & Kutz, J. N. Modern Koopman theory
+17. Brunton, S. L., Budišić, M., Kaiser, E. & Kutz, J. N. Modern Koopman theory
    for dynamical systems. *SIAM Rev.* **64**, 229–340 (2022).
-15. Mauroy, A. & Mezić, I. On the use of Fourier averages to compute the global
+18. Mauroy, A. & Mezić, I. On the use of Fourier averages to compute the global
    isochrons of (quasi)periodic dynamics. *Chaos* **22**, 033112 (2012).
-16. Nakao, H. Phase reduction approach to synchronisation of nonlinear
+19. Nakao, H. Phase reduction approach to synchronisation of nonlinear
    oscillators. *Contemp. Phys.* **57**, 188–214 (2016).
-17. Lusch, B., Kutz, J. N. & Brunton, S. L. Deep learning for universal linear
+20. Lusch, B., Kutz, J. N. & Brunton, S. L. Deep learning for universal linear
    embeddings of nonlinear dynamics. *Nat. Commun.* **9**, 4950 (2018).
-18. Ijspeert, A. J., Nakanishi, J., Hoffmann, H., Pastor, P. & Schaal, S.
+21. Ijspeert, A. J., Nakanishi, J., Hoffmann, H., Pastor, P. & Schaal, S.
    Dynamical movement primitives: learning attractor models for motor behaviors.
    *Neural Comput.* **25**, 328–373 (2013).
-19. Amsallem, D. & Farhat, C. Interpolation method for adapting reduced-order
+22. Amsallem, D. & Farhat, C. Interpolation method for adapting reduced-order
    models and application to aeroelasticity. *AIAA J.* **46**, 1803–1813 (2008).
-20. Geuss, M., Panzer, H. & Lohmann, B. STABLE — a stability algorithm for
+23. Geuss, M., Panzer, H. & Lohmann, B. STABLE — a stability algorithm for
    parametric model reduction by matrix interpolation. *Math. Comput. Model.
    Dyn. Syst.* **22**, 307–322 (2016).
-21. Li, Z. et al. Fourier neural operator for parametric partial differential
+24. Li, Z. et al. Fourier neural operator for parametric partial differential
     equations. In *Int. Conf. Learning Representations* (2021).
-22. Lu, L., Jin, P., Pang, G., Zhang, Z. & Karniadakis, G. E. Learning nonlinear
+25. Lu, L., Jin, P., Pang, G., Zhang, Z. & Karniadakis, G. E. Learning nonlinear
     operators via DeepONet based on the universal approximation theorem of
     operators. *Nat. Mach. Intell.* **3**, 218–229 (2021).
-23. Schmid, P. J. Dynamic mode decomposition of numerical and experimental data.
+26. Schmid, P. J. Dynamic mode decomposition of numerical and experimental data.
     *J. Fluid Mech.* **656**, 5–28 (2010).
-24. Askham, T. & Kutz, J. N. Variable projection methods for an optimized
+27. Askham, T. & Kutz, J. N. Variable projection methods for an optimized
     dynamic mode decomposition. *SIAM J. Appl. Dyn. Syst.* **17**, 380–416
     (2018).
-25. Aliev, R. R. & Panfilov, A. V. A simple two-variable model of cardiac
+28. Aliev, R. R. & Panfilov, A. V. A simple two-variable model of cardiac
    excitation. *Chaos Solitons Fractals* **7**, 293–301 (1996).
-26. Williamson, C. H. K. Oblique and parallel modes of vortex shedding in the
+29. Kohl, G., Chen, L.-W. & Thuerey, N. Benchmarking autoregressive conditional
+   diffusion models for turbulent flow simulation. Preprint at
+   https://arxiv.org/abs/2309.01745 (2023).
+30. Williamson, C. H. K. Oblique and parallel modes of vortex shedding in the
     wake of a circular cylinder at low Reynolds numbers. *J. Fluid Mech.* **206**,
     579–627 (1989).
-27. Ronneberger, O., Fischer, P. & Brox, T. U-Net: convolutional networks for
+31. Ronneberger, O., Fischer, P. & Brox, T. U-Net: convolutional networks for
    biomedical image segmentation. In *Medical Image Computing and
    Computer-Assisted Intervention – MICCAI 2015* 234–241 (Springer, 2015).
-28. Gupta, J. K. & Brandstetter, J. Towards multi-spatiotemporal-scale
+32. Gupta, J. K. & Brandstetter, J. Towards multi-spatiotemporal-scale
    generalized PDE modeling. *Trans. Mach. Learn. Res.* (2023).
 
 ## Acknowledgements
