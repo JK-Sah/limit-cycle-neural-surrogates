@@ -104,7 +104,8 @@ def main():
     # pooled residual vs direct
     print()
     for lab, sel in (("residual", lambda arm: "-fno-" in arm), ("direct", lambda arm: "-fnodir-" in arm),
-                     ("noise", lambda arm: "-fnonz-" in arm)):
+                     ("noise", lambda arm: "-fnonz-" in arm), ("noise10", lambda arm: "-fnonz10-" in arm),
+                     ("noise30", lambda arm: "-fnonz30-" in arm)):
         g = [x for arm in arms if sel(arm) for x in arms[arm]]
         ms = [x["mult"] for x in g if x["mult"]]
         wp = sum(x["out"] == "cycle-wp" for x in g)
@@ -117,7 +118,8 @@ def main():
         json.dump(out, open(a.json, "w"), indent=1)
     if a.markdown:
         name = {"ns": "Navier–Stokes", "wake": "wake", "cardiac": "cardiac"}
-        par = {"fno": "residual", "fnodir": "direct", "fnonz": "residual + noise"}
+        par = {"fno": "residual", "fnodir": "direct", "fnonz": "residual + noise 10⁻³",
+               "fnonz10": "residual + noise 10⁻²", "fnonz30": "residual + noise 3 × 10⁻²"}
         sci = lambda v: "—" if v is None or not np.isfinite(v) else (
             f"{v:.2g}" if 0.01 <= v < 10 else
             "{:.2f} × 10{}".format(v / 10 ** int(np.floor(np.log10(v))),
@@ -128,7 +130,8 @@ def main():
                  "| median \\|δ\\| (runs keeping a cycle) | transverse multiplier |",
                  "|---|---|---|---|---|---|---|---|---|---|---|"]
         keyorder = lambda arm: ({"wake": 0, "ns": 1, "cardiac": 2}[arm.split("-")[0]],
-                                {"fno": 0, "fnonz": 1, "fnodir": 2}.get(arm.split("-")[1], 3),
+                                {"fno": 0, "fnonz": 1, "fnonz10": 2, "fnonz30": 3,
+                                 "fnodir": 4}.get(arm.split("-")[1], 5),
                                 int(arm.split("-K")[1].split("-")[0]), arm.split("-b")[1])
         for arm in sorted((x for x in arms if not x.split("-")[1].startswith("unet")), key=keyorder):
             g = arms[arm]; sysn, ar = arm.split("-")[0], arm.split("-")[1]

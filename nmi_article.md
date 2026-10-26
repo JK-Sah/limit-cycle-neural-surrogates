@@ -209,8 +209,9 @@ With the phase multiplier at 1, the weakest transverse multiplier of 95 residual
 operators has median 0.97 per period and none lies below 0.5 (Fig. 4a). Almost
 nothing restores the amplitude, so slow drift carries the orbit off the cycle,
 and a δ fitted over the first 100 periods, the protocol of earlier operator
-studies including ours, describes a transient. Noise injection leaves the
-multiplier where it was (median 0.96, nine models).
+studies including ours, describes a transient. Noise injection at 10⁻³ leaves
+the multiplier where it was (median 0.96), and ten and thirty times that
+amplitude moves it only to 0.91 and 0.95 (Discussion).
 
 Predicting the next state instead of the increment changes this on every system.
 The transverse multiplier falls to a median 0.019 per period and below 0.18 in
@@ -325,27 +326,25 @@ leaves the transverse multipliers near one while fitting better than the
 alternative. Interpolating operators does not preserve them, because neutrality
 is measure-zero.
 
-Why the residual parameterisation does this is not established here, but the
-form of the map suggests an account. A residual step x + F(x) is the identity
-plus a learned correction, so every multiplier starts at one and moves only
-where the objective pushes it. That is why residual and integration-constrained
-outputs are recommended for stability: they hold the one-step Jacobian near the
-identity<sup>11,12</sup>, and on emulators of a chaotic system direct-step
-models exceed the unit circle and diverge where integration-constrained ones do
-not<sup>13</sup>; on turbulent flow residual targets make no measurable
-difference<sup>29</sup>. Those studies measure stability as the absence of
-divergence, and by that measure most residual operators here are stable: 94 of
-120 never blow up, and most of those drift or collapse instead. On a limit
-cycle, a Jacobian held near the identity in the transverse directions is what
-removes the restoring force. A field operator's state has about 10⁴ dimensions
-and its attractor a handful, so nearly every transverse direction is one the
-training trajectories never probe; a direct map has no identity to fall back on
-and must reconstruct the state, which contracts what lies off the training
-manifold. The latent residual map on eight POD coefficients keeps its cycle
-(Extended Data Tables 2, 5), as the account requires. Noise injection sits
-uneasily with it: perturbing the inputs against clean targets should teach
-contraction, yet left the multiplier at 0.96, although at 10⁻³ the perturbation
-was under 1% of the field's fluctuation and larger amplitudes are untested here.
+Why the residual parameterisation does this is not established here. A residual
+step x + F(x) is the identity plus a learned correction, so its multipliers
+start at one and move only where the objective pushes them. That is why residual
+and integration-constrained outputs are recommended for stability: they hold the
+Jacobian near the identity<sup>11,12</sup> and avoid the blow-up of direct-step
+emulators of chaotic systems<sup>13</sup>, and residual targets make no
+measurable difference on turbulent flow<sup>29</sup>. By that measure, the
+absence of divergence, most residual operators here are stable too: 94 of 120
+never blow up. On a limit cycle, a Jacobian held near the identity in the
+transverse directions is what removes the restoring force. That the culprit is
+the many directions a 10⁴-dimensional state leaves unprobed by the training data
+fits the wake, where the residual operators' weakest transverse direction lies
+outside the data's subspace (median 0.0% inside) and the direct operators'
+inside it (96%), but not Navier–Stokes (70% inside; Methods). Nor does noise
+injection reproduce the direct parameterisation: at 10⁻², 6–9% of the field's
+fluctuation, it makes the cycle well-posed in 7 of 10 runs against 1 of 10 at
+10⁻³, but the multiplier stays at 0.91, and δ ranges from close to the direct
+operators' on Navier–Stokes to 30 times larger on the wake (Extended Data Table
+6). What sets these multipliers in general remains open.
 
 Methods that impose a neutral, correctly tuned cycle succeed whether learned or
 classical, from harmonic-locked optimized DMD<sup>27</sup> to a repaired
@@ -357,9 +356,11 @@ The practical recommendations are short. Before quoting δ, check that both the
 data and the surrogate's own long rollout are well-posed: split each record,
 refit, compare. For a field operator, roll out hundreds of periods and compute
 the leading transverse multiplier; near one, the cycle will not hold. Predict
-the state rather than the increment, and train on segments of at least a period,
-which keeps the cycle more often though it does little for δ. Do not read
-long-horizon fidelity off a validation error, and report more than one seed. For
+the state rather than the increment, or, where the increment must be predicted,
+inject noise at several per cent of the fluctuation, which keeps the cycle more
+often but less reliably; train on segments of at least a period, which also
+keeps the cycle more often though it does little for δ. Do not read long-horizon
+fidelity off a validation error, and report more than one seed. For
 phase-resolved work the horizon is 1/(4δ); if the frequency can be measured,
 impose it with neutrality, expecting the benefit in-distribution only.
 
@@ -368,13 +369,11 @@ low-dimensional attractor, and every one the central results rest on is
 periodic. Chaotic attractors have no periodic orbit and the argument does not
 transfer; for the quasi-periodic side we locate the boundary and give a test,
 but supply no replacement law. The parameterisation result rests on one operator
-architecture at one width, three systems and five seeds per arm. The wake is
-two-dimensional above Re ≈ 190, where the physical flow is not, so the
-extrapolation points are numerically valid but physically artificial, and
-parameter sweeps are one-dimensional. In the other direction the argument uses
-nothing about fluids, only an autonomous model with a stable periodic attractor,
-and the cardiac spiral shows it holding outside them; gaits, circadian rhythms
-and grid oscillations are untested.
+architecture at one width, three systems and five seeds per arm, and parameter
+sweeps are one-dimensional. In the other direction the argument uses nothing
+about fluids, only an autonomous model with a stable periodic attractor, and the
+cardiac spiral shows it holding outside them; gaits, circadian rhythms and grid
+oscillations are untested.
 
 Our own results carry the paper's warning about single-seed δ: an earlier
 three-seed comparison suggesting that a one-period objective improves δ 81-fold
@@ -498,20 +497,22 @@ steps with start times drawn at random, so a K-step objective sees 8K
 transitions per update; two controls hold 8K fixed while changing K (K = 25 at
 batch 13 and K = 40 at batch 5 on Navier–Stokes). Inputs are normalised by the
 maximum field magnitude and a coordinate grid is appended; noise injection,
-where stated, adds Gaussian noise of standard deviation 10⁻³ to each input of
-the unrolled loss. Every operator result comes from one protocol, run on NVIDIA
-A100 GPUs in float64 with initialisation and segment order both seeded, five
-seeds per configuration. After training each model is rolled out 400 periods
-from the first training snapshot and projected onto the training POD basis; δ is
-fitted on periods 200–400, its split-half instability on periods 200–300 against
-300–400, and δ on the second half of the first 100 periods, the protocol of
-earlier operator studies including ours, is recorded alongside. Gradient
-checkpointing keeps long segments within 40 GB without changing the arithmetic.
-Training under this protocol is deterministic: configurations repeated in two
-separate sweeps reproduced training loss and δ to the printed precision. Model
-weights are saved with the results. Latent models are run at five seeds on the
-oscillator and the wake; results are medians, with seed spread reported as the
-ratio of largest to smallest |δ|.
+where stated, adds Gaussian noise of standard deviation 10⁻³, 10⁻² or 3 × 10⁻²
+to each input of the unrolled loss (under 1%, 6–9% and 17–28% of the RMS
+fluctuation of the normalised wake and Navier–Stokes fields). Every operator
+result comes from one protocol, run on NVIDIA A100 GPUs in float64 with
+initialisation and segment order both seeded, five seeds per configuration.
+After training each model is rolled out 400 periods from the first training
+snapshot and projected onto the training POD basis; δ is fitted on periods
+200–400, its split-half instability on periods 200–300 against 300–400, and δ on
+the second half of the first 100 periods, the protocol of earlier operator
+studies including ours, is recorded alongside. Gradient checkpointing keeps long
+segments within 40 GB without changing the arithmetic. Training under this
+protocol is deterministic: configurations repeated in two separate sweeps
+reproduced training loss and δ to the printed precision. Model weights are saved
+with the results. Latent models are run at five seeds on the oscillator and the
+wake; results are medians, with seed spread reported as the ratio of largest to
+smallest |δ|.
 
 **Outcome of an operator rollout.** Each 400-period rollout is classified as
 diverged (it left the bounded region within 100 periods), late-diverged (within
@@ -537,6 +538,19 @@ is 1, the phase direction, and the next is the weakest transverse contraction.
 On a Stuart–Landau map embedded with three linearly decaying coordinates the
 procedure recovers the exact multipliers per period, 1, 0.221 and 0.00656, to
 the five digits printed.
+
+**Where the weakest contraction lives.** For the operators at matched objective,
+the second Lyapunov vector from the same settling and QR iteration is projected
+onto the leading 8 and 32 POD modes of the normalised training fields, and its
+energy at Fourier wavenumbers outside the operator's retained modes is computed.
+The first, phase vector lies 98–100% inside the 8-mode subspace on the wake and
+Navier–Stokes fields in every arm but one (79%, Navier–Stokes with noise at
+10⁻³), as it must for a tangent to the cycle; the residual Navier–Stokes
+operators' weakest direction lies a median 70% inside it, over the three that
+settle; on the cardiac field, where eight modes carry 97.6% of the energy, both
+parameterisations' weakest directions lie outside it and the measure does not
+discriminate. Two of five residual Navier–Stokes operators at this objective
+diverge while settling and are not measured.
 
 **Earlier operator runs and an architecture that did not train.** Before this
 protocol, operators were trained on CPUs with unseeded initialisation, two to
@@ -798,19 +812,19 @@ residual ones, fitting worse, and below them.
 Fourier neural operators on three fields, five seeds per arm (Extended Data
 Table 6). **a**, Weakest transverse Floquet multiplier per period of each
 trained operator, computed from its own Jacobian along its attractor; the phase
-multiplier is 1 throughout. Bars are medians. Residual operators, with or
-without noise injection, sit at 0.97, where almost nothing restores the
-amplitude; the direct operators' medians are 0.002 to 0.06 on the three systems
-(one direct cardiac model, which fell onto a fixed point, lies off-scale below).
-**b**, What 400 periods of rollout do, pooled over segment lengths: a well-posed
-cycle passes the split-half test on periods 200–400. **c**, Late |δ| at matched
-objectives; filled markers are seeds with a well-posed cycle, bars medians over
-seeds that did not diverge (diverged seeds at the top). The two open direct
-markers at cardiac K/T = 1.01 are a clean cycle at half the true period and a
-fixed point. **d**, Fraction of residual seeds that keep a cycle against segment
-length: a longer objective keeps the cycle more often on the wake and cardiac
-fields, gradually and with no change at one period, and not detectably on
-Navier–Stokes.
+multiplier is 1 throughout. Bars are medians. Residual operators sit at 0.97,
+and noise injection at 10⁻³, 10⁻² or 3 × 10⁻² moves them only to 0.91–0.96,
+where almost nothing restores the amplitude; the direct operators' medians are
+0.002 to 0.06 on the three systems (one direct cardiac model, which fell onto a
+fixed point, lies off-scale below). **b**, What 400 periods of rollout do,
+pooled over segment lengths: a well-posed cycle passes the split-half test on
+periods 200–400. **c**, Late |δ| at matched objectives; filled markers are seeds
+with a well-posed cycle, bars medians over seeds that did not diverge (diverged
+seeds at the top). The two open direct markers at cardiac K/T = 1.01 are a clean
+cycle at half the true period and a fixed point. **d**, Fraction of residual
+seeds that keep a cycle against segment length: a longer objective keeps the
+cycle more often on the wake and cardiac fields, gradually and with no change at
+one period, and not detectably on Navier–Stokes.
 
 **Fig. 5 | Two spectral properties, imposed one at a time.** Eigenvalues of a
 parametric reduced-order operator at all 13 Reynolds numbers, plotted in the
@@ -943,6 +957,8 @@ transverse multiplier is the median over seeds of the weakest transverse Floquet
 multiplier per period of the trained model (Methods). Training MSE is the median
 over all seeds. Residual operators fit as well as or better than direct ones and
 keep a well-posed cycle in 7 of 120 runs; direct operators keep one in 28 of 30.
+Noise injection, at standard deviation 10⁻³, 10⁻² or 3 × 10⁻² of the field
+maximum, applies to residual operators at the objective of the direct ones.
 
 | system | parameterisation | K/T | batch | diverged | collapsed or wrong rhythm | cycle, not well-posed | well-posed cycle | median train MSE | median \|δ\| (runs keeping a cycle) | transverse multiplier |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -952,7 +968,9 @@ keep a well-posed cycle in 7 of 120 runs; direct operators keep one in 28 of 30.
 | wake | residual | 1.24 | 8 | 1 | 0 | 4 | 0 | 1.35 × 10⁻⁵ | 2.96 × 10⁻⁵ | 0.97 |
 | wake | residual | 1.49 | 8 | 0 | 0 | 5 | 0 | 1.92 × 10⁻⁵ | 1.32 × 10⁻⁴ | 0.96 |
 | wake | residual | 1.99 | 8 | 0 | 0 | 4 | 1 | 2.60 × 10⁻⁵ | 8.43 × 10⁻⁶ | 0.96 |
-| wake | residual + noise | 0.75 | 8 | 0 | 2 | 3 | 0 | 1.69 × 10⁻⁵ | 1.13 × 10⁻⁴ | 0.97 |
+| wake | residual + noise 10⁻³ | 0.75 | 8 | 0 | 2 | 3 | 0 | 1.69 × 10⁻⁵ | 1.13 × 10⁻⁴ | 0.97 |
+| wake | residual + noise 10⁻² | 0.75 | 8 | 0 | 0 | 2 | 3 | 1.88 × 10⁻⁵ | 5.15 × 10⁻⁴ | 0.91 |
+| wake | residual + noise 3 × 10⁻² | 0.75 | 8 | 0 | 1 | 1 | 3 | 2.77 × 10⁻⁵ | 3.06 × 10⁻³ | 0.91 |
 | wake | direct | 0.75 | 8 | 0 | 0 | 0 | 5 | 1.31 × 10⁻⁵ | 1.70 × 10⁻⁵ | 0.058 |
 | wake | direct | 1.00 | 8 | 0 | 0 | 0 | 5 | 1.52 × 10⁻⁵ | 2.58 × 10⁻⁶ | 7.28 × 10⁻³ |
 | Navier–Stokes | residual | 0.25 | 8 | 4 | 1 | 0 | 0 | 6.55 × 10⁻⁷ | — | 0.97 |
@@ -967,7 +985,9 @@ keep a well-posed cycle in 7 of 120 runs; direct operators keep one in 28 of 30.
 | Navier–Stokes | residual | 1.25 | 8 | 1 | 2 | 2 | 0 | 7.74 × 10⁻⁶ | 5.79 × 10⁻⁴ | 0.99 |
 | Navier–Stokes | residual | 1.50 | 8 | 1 | 0 | 4 | 0 | 1.36 × 10⁻⁵ | 4.77 × 10⁻⁵ | 0.98 |
 | Navier–Stokes | residual | 2.00 | 8 | 0 | 1 | 2 | 2 | 2.25 × 10⁻⁵ | 3.03 × 10⁻⁴ | 0.92 |
-| Navier–Stokes | residual + noise | 0.62 | 8 | 1 | 2 | 1 | 1 | 1.04 × 10⁻⁵ | 8.09 × 10⁻⁴ | 0.9 |
+| Navier–Stokes | residual + noise 10⁻³ | 0.62 | 8 | 1 | 2 | 1 | 1 | 1.04 × 10⁻⁵ | 8.09 × 10⁻⁴ | 0.9 |
+| Navier–Stokes | residual + noise 10⁻² | 0.62 | 8 | 0 | 0 | 1 | 4 | 2.47 × 10⁻⁵ | 1.82 × 10⁻⁴ | 0.91 |
+| Navier–Stokes | residual + noise 3 × 10⁻² | 0.62 | 8 | 0 | 1 | 2 | 2 | 9.29 × 10⁻⁶ | 8.11 × 10⁻⁴ | 0.98 |
 | Navier–Stokes | direct | 0.62 | 8 | 0 | 0 | 0 | 5 | 2.89 × 10⁻⁵ | 3.05 × 10⁻⁴ | 2.49 × 10⁻³ |
 | Navier–Stokes | direct | 1.00 | 8 | 0 | 0 | 0 | 5 | 9.45 × 10⁻⁵ | 6.25 × 10⁻⁴ | 1.67 × 10⁻³ |
 | cardiac | residual | 0.25 | 8 | 2 | 3 | 0 | 0 | 1.61 × 10⁻⁵ | — | 0.98 |

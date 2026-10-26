@@ -571,9 +571,14 @@ def fig_operators(res, outdir):
     if not rows:
         print("  skipping fig_operators: no seglen_v2 rows"); return
     systems = [("wake", "wake"), ("ns", "Navier–Stokes"), ("cardiac", "cardiac")]
+    # noise amplitudes share one hue (the palette is capped at five) and are
+    # told apart by marker
     kinds = [("fno", "residual", C["vermillion"], "o"),
-             ("fnonz", "residual + noise", C["purple"], "^"),
+             ("fnonz", "residual + noise 10⁻³", C["purple"], "^"),
+             ("fnonz10", "residual + noise 10⁻²", C["purple"], "v"),
+             ("fnonz30", "residual + noise 3 × 10⁻²", C["purple"], "D"),
              ("fnodir", "direct", C["skyblue"], "s")]
+    off = np.linspace(-0.34, 0.34, len(kinds))
     fig = plt.figure(figsize=(7.2, 5.4))
     gs = fig.add_gridspec(2, 2, hspace=0.55, wspace=0.32)
     axa, axb = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])
@@ -586,10 +591,10 @@ def fig_operators(res, outdir):
             v = [r["m"][1] for r in rows if r["sys"] == s and r["arch"] == arch and r["m"]]
             if not v:
                 continue
-            x = i + (j - 1) * 0.26 + rng.uniform(-0.06, 0.06, len(v))
+            x = i + off[j] + rng.uniform(-0.04, 0.04, len(v))
             axa.scatter(x, v, s=10, color=col, marker=mk, alpha=0.6, lw=0,
-                        label=lab if i == 0 else None, zorder=3)
-            axa.plot([i + (j - 1) * 0.26 - 0.1, i + (j - 1) * 0.26 + 0.1],
+                        label=lab if s == "wake" else None, zorder=3)
+            axa.plot([i + off[j] - 0.07, i + off[j] + 0.07],
                      [np.median(v)] * 2, color=col, lw=1.6, zorder=4)
     axa.axhline(1.0, color=INK, lw=0.8, ls=(0, (4, 3)))
     axa.annotate("no restoring force", (2.45, 1.12), fontsize=6, ha="right", color=INK)
@@ -597,7 +602,7 @@ def fig_operators(res, outdir):
     axa.set_xticks(range(3)); axa.set_xticklabels([s[1] for s in systems], fontsize=7)
     axa.set_ylabel("transverse multiplier per period  $|\\lambda_2|$")
     axa.set_title("a  Floquet spectrum of the trained operator", loc="left", fontsize=7.5)
-    axa.legend(fontsize=6, loc="lower left")
+    axa.legend(fontsize=5.5, loc="lower left", ncol=1)
 
     # b: outcome of every 400-period rollout, residual (all K) vs direct
     cats = [("cycle-wp", "well-posed cycle", C["skyblue"]),
